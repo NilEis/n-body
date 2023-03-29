@@ -10,10 +10,11 @@
 #include "shader.h"
 #include "solver.h"
 
-#ifdef __STDC_NO_ATOMICS__
-#error this implementation needs atomics
-#endif
+#if NUM_THREADS != 0
 #include <stdatomic.h>
+atomic_uint sem_comp = ATOMIC_VAR_INIT(0);
+atomic_uint sem_up = ATOMIC_VAR_INIT(0);
+#endif
 
 #define NUM_THREADS 0
 #define USE_PTHREAD 0
@@ -36,12 +37,6 @@ DWORD WINAPI tick(void *data);
 #else
 void tick(void);
 #endif
-
-#if NUM_THREADS != 0
-atomic_uint sem_comp = ATOMIC_VAR_INIT(0);
-atomic_uint sem_up = ATOMIC_VAR_INIT(0);
-#endif
-
 typedef struct
 {
     Particle *particles;
@@ -108,7 +103,11 @@ int main()
     HANDLE thread[NUM_THREADS];
 #endif
     {
+#if NUM_THREADS == 0
+        unsigned int n_size = 0;
+#else
         unsigned int n_size = N / NUM_THREADS;
+#endif
         for (int i = 0; i < NUM_THREADS; i++)
         {
             thread_arg *t_args = (thread_arg *)calloc(sizeof(thread_arg), 1);

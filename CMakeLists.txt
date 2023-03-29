@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.9.0)
-project(n-body VERSION 0.1.0 LANGUAGES C)
+project(n-body VERSION 0.1.0 LANGUAGES C CUDA)
 
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-ffunction-sections -fdata-sections -march=native)
@@ -42,7 +42,7 @@ string(REPLACE "\n" "\\n\"\\\n\"" SHADER_vs "${SHADER_vs_file}")
 
 configure_file(${CMAKE_SOURCE_DIR}/include/shader.h.in ${CMAKE_SOURCE_DIR}/include/shader.h @ONLY)
 
-target_link_libraries(n-body m glfw glad_gl_core_33 ma-log cglm)
+target_link_libraries(n-body glfw glad_gl_core_33 ma-log cglm)
 
 include(CheckIPOSupported)
 
