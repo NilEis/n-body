@@ -1,0 +1,12 @@
+#ifndef SHADER_H
+#define SHADER_H
+
+#define SHADER_fs "@SHADER_fs@"
+const char const *basic_shader_fs = SHADER_fs;
+#undef SHADER_fs
+
+#define SHADER_vs "@SHADER_vs@"
+const char const *basic_shader_vs = SHADER_vs;
+#undef SHADER_vs
+
+#endif // SHADER_H

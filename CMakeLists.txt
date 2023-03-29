@@ -5,18 +5,44 @@ if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-ffunction-sections -fdata-sections -march=native)
 endif()
 
+OPTION (USE_OpenMP "Use OpenMP" ON)
+IF(USE_OpenMP)
+  FIND_PACKAGE(OpenMP)
+  IF(OPENMP_FOUND)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+  ENDIF()
+ENDIF()
+
 add_subdirectory(extern/glfw)
-add_subdirectory(extern/glew)
+
+add_subdirectory(extern/cglm)
+
+add_subdirectory(extern/logger)
+
+set(GLAD_SOURCES_DIR "${PROJECT_SOURCE_DIR}/extern/glad/")
+add_subdirectory("${GLAD_SOURCES_DIR}/cmake" glad_cmake)
+glad_add_library(glad_gl_core_33 REPRODUCIBLE API gl:core=3.3)
 
 add_executable(n-body ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/octree.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/vec3.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/particle.c
+${CMAKE_CURRENT_SOURCE_DIR}/src/camera.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/solver.c)
 
 target_include_directories(n-body PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/)
 
-target_link_libraries(n-body m glfw libglew_static)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/shader/main.fs)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/shader/main.vs)
+file(READ ${CMAKE_SOURCE_DIR}/shader/main.fs SHADER_fs_file)
+string(REPLACE "\n" "\\n\"\\\n\"" SHADER_fs "${SHADER_fs_file}")
+file(READ ${CMAKE_SOURCE_DIR}/shader/main.vs SHADER_vs_file)
+string(REPLACE "\n" "\\n\"\\\n\"" SHADER_vs "${SHADER_vs_file}")
+
+configure_file(${CMAKE_SOURCE_DIR}/include/shader.h.in ${CMAKE_SOURCE_DIR}/include/shader.h @ONLY)
+
+target_link_libraries(n-body m glfw glad_gl_core_33 ma-log cglm)
 
 include(CheckIPOSupported)
 
