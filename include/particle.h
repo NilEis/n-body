@@ -11,6 +11,6 @@ typedef struct Particle {
 
 void fill_particles_random(Particle *particles, int n, vec3_t min_pos, vec3_t max_pos);
 
-void update_particles(Particle *particles, int n, int start, int end);
+void update_particles(Particle *particles, int n, int start, int end, double dt);
 
 #endif // PARTICLE_H

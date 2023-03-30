@@ -1,19 +1,12 @@
 cmake_minimum_required(VERSION 3.9.0)
-project(n-body VERSION 0.1.0 LANGUAGES C CUDA)
+project(n-body VERSION 0.1.0 LANGUAGES C)
+
+option(USE_CUDA "Use cuda" ON)
 
 
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
 add_compile_options(-ffunction-sections -fdata-sections -march=native)
 endif()
-
-OPTION (USE_OpenMP "Use OpenMP" ON)
-IF(USE_OpenMP)
-FIND_PACKAGE(OpenMP)
-IF(OPENMP_FOUND)
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-ENDIF()
-ENDIF()
 
 add_subdirectory(extern/glfw)
 
@@ -25,13 +18,25 @@ set(GLAD_SOURCES_DIR "${PROJECT_SOURCE_DIR}/extern/glad/")
 add_subdirectory("${GLAD_SOURCES_DIR}/cmake" glad_cmake)
 glad_add_library(glad_gl_core_33 REPRODUCIBLE API gl:core=3.3)
 
-add_executable(n-body ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
-${CMAKE_CURRENT_SOURCE_DIR}/src/octree.c
-${CMAKE_CURRENT_SOURCE_DIR}/src/vec3.c
-${CMAKE_CURRENT_SOURCE_DIR}/src/particle.c
-${CMAKE_CURRENT_SOURCE_DIR}/src/camera.c
-${CMAKE_CURRENT_SOURCE_DIR}/src/solver.c
-${CMAKE_CURRENT_SOURCE_DIR}/src/cuda_tick.cu)
+if(USE_CUDA)
+    enable_language(CUDA)
+    add_compile_definitions(USE_CUDA=1)
+    add_executable(n-body ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/octree.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vec3.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/particle.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/camera.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda_tick.cu
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/solver.c)
+else()
+    add_executable(n-body ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/octree.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vec3.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/particle.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/camera.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/solver.c)
+
+endif()
 
 set_property(TARGET n-body PROPERTY C_STANDARD 11)
 set_target_properties(n-body PROPERTIES CUDA_ARCHITECTURES "all")

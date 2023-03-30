@@ -13,7 +13,7 @@ void fill_particles_random(Particle *particles, int n, vec3_t min_pos, vec3_t ma
 
         particles[i].pos = vec3_mul((((double)rand() / RAND_MAX) * max_pos.x) + 5.0, vec3_normalize(particles[i].pos));
 
-        particles[i].vel = vec3_mul(vec3_length(particles[i].pos) / (max_pos.x+2.0), vec3_mul(400, vec3_normalize(vec3_cross(particles[i].pos, (vec3_t){0, 1, 0}))));
+        particles[i].vel = vec3_mul(vec3_length(particles[i].pos) / (max_pos.x + 5.0), vec3_mul(100, vec3_normalize(vec3_cross(particles[i].pos, (vec3_t){0, 1, 0}))));
 
         particles[i].mass = 1000 + rand() % 50;
         particles[i].mass = particles[i].mass == 0.0 ? 1.0 : particles[i].mass;
@@ -23,16 +23,16 @@ void fill_particles_random(Particle *particles, int n, vec3_t min_pos, vec3_t ma
     particles[n - 1].pos.z = 0;
 
     particles[n - 1].vel.x = 0;
-    particles[n - 1].vel.y = -10;
+    particles[n - 1].vel.y = 0;
     particles[n - 1].vel.z = 0;
 
     particles[n - 1].mass = 50099999;
 }
 
-void update_particles(Particle *particles, int n, int start, int end)
+void update_particles(Particle *particles, int n, int start, int end, double dt)
 {
     for (int i = start; i < end; i++)
     {
-        particles[i].pos = vec3_add(particles[i].pos, particles[i].vel);
+        particles[i].pos = vec3_add(particles[i].pos, vec3_mul(dt, particles[i].vel));
     }
 }

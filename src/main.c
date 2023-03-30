@@ -28,8 +28,8 @@ volatile int sem_comp = 0;
 volatile int sem_up = 0;
 #else
 #include <stdatomic.h>
-atomic_uint sem_comp = ATOMIC_VAR_INIT(0);
-atomic_uint sem_up = ATOMIC_VAR_INIT(0);
+atomic_uint sem_comp = 0;
+atomic_uint sem_up = 0;
 #endif
 
 #if (defined(__unix__) || USE_PTHREAD)
@@ -58,9 +58,11 @@ typedef struct
     unsigned int end;
 } thread_arg;
 
-Particle particles[NUM_PARTICLES] = {0};
+Particle *particles = NULL;
 
 void error_callback(int error, const char *description);
+
+GLFWwindow *initGLFW(void);
 
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
@@ -73,40 +75,31 @@ static inline void initialize_camera(void);
 
 static camera cam = {0};
 
+static int num_particles = 1500;
+static double dt = 0.1;
+
+static int window_width = 600;
+static int window_height = 400;
+
 static struct
 {
     double dt;
     double last_frame;
 } delta_time = {0};
 
-int main()
+int main(int argc, char *argv[])
 {
+    if (argc == 2)
+    {
+        num_particles = atoi(argv[1]);
+    }
     LOG(LOG_INFO, "Initialize camera\n");
     initialize_camera();
     LOG(LOG_INFO, "Create Particles\n");
-    fill_particles_random((Particle *)&particles, NUM_PARTICLES, (vec3_t){-P_RANGE, -P_RANGE, -P_RANGE}, (vec3_t){P_RANGE, P_RANGE, P_RANGE});
-    // Init GLFW
-    LOG(LOG_INFO, "Init GLFW\n");
-    if (!glfwInit())
-    {
-        LOG(LOG_ERROR, "Could not initialize glfw\n");
-    }
-    glfwSetErrorCallback(error_callback);
-    // Create window and context
-    glfwWindowHint(GLFW_DOUBLEBUFFER, 1);
-    GLFWwindow *window = glfwCreateWindow(640, 480, "N-Body", NULL, NULL);
-    if (!window)
-    {
-        LOG(LOG_ERROR, "Could not create window or context\n");
-    }
+    particles = (Particle *)calloc(num_particles, sizeof(Particle));
+    fill_particles_random(particles, num_particles, (vec3_t){-P_RANGE, -P_RANGE, -P_RANGE}, (vec3_t){P_RANGE, P_RANGE, P_RANGE});
 
-    glfwMakeContextCurrent(window);
-
-    glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetScrollCallback(window, scroll_callback);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    GLFWwindow *window = initGLFW();
 
     LOG(LOG_INFO, "Init GLAD\n");
     gladLoadGL(glfwGetProcAddress);
@@ -136,7 +129,7 @@ int main()
     {
         if (glfwWindowShouldClose(window))
         {
-            static stop_called = 1;
+            static int stop_called = 1;
             if (stop_called)
             {
                 running = 0;
@@ -150,12 +143,9 @@ int main()
         double currentFrame = glfwGetTime();
         delta_time.dt = currentFrame - delta_time.last_frame;
         delta_time.last_frame = currentFrame;
-        // printf("%f\n", delta_time.dt);
-        // printf("%f,%f,%f - %f,%f,%f\n", particles[0].pos.x, particles[0].pos.y, particles[0].pos.z, particles[0].vel.x, particles[0].vel.y, particles[0].vel.z);
         process_input(window);
-        // fill_particles_random((Particle *)&particles, N, (vec3_t){-10.0, -10.0, -10.0}, (vec3_t){10.0, 10.0, 10.0});
         glm_lookat(cam.pos, cam.center, cam.up, view_mat);
-        glm_perspective(radians(cam.fov), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 10000000.0f, proj_mat);
+        glm_perspective(radians(cam.fov), (float)window_width / (float)window_height, 0.1f, 10000000.0f, proj_mat);
 
         glUniformMatrix4fv(glGetUniformLocation(shader_prog, "model"), 1, GL_FALSE, (const GLfloat *)model_mat);
         glUniformMatrix4fv(glGetUniformLocation(shader_prog, "view"), 1, GL_FALSE, (const GLfloat *)view_mat);
@@ -165,13 +155,13 @@ int main()
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         // Set the vertex attribute pointers
         glVertexAttribPointer(0, 3, GL_DOUBLE, GL_FALSE, sizeof(Particle), (void *)0);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * NUM_PARTICLES, particles, GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
         glEnableVertexAttribArray(0);
 
         // Draw the particles as points
         glBindVertexArray(VAO);
         glPointSize(1.0f); // Set the size of the points
-        glDrawArrays(GL_POINTS, 0, NUM_PARTICLES);
+        glDrawArrays(GL_POINTS, 0, num_particles);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -188,6 +178,35 @@ int main()
     glfwTerminate();
     LOG(LOG_INFO, "Stopping\n");
     return 0;
+}
+
+GLFWwindow *initGLFW(void)
+{
+    // Init GLFW
+    LOG(LOG_INFO, "Init GLFW\n");
+    if (!glfwInit())
+    {
+        LOG(LOG_ERROR, "Could not initialize glfw\n");
+        return NULL;
+    }
+    glfwSetErrorCallback(error_callback);
+    // Create window and context
+    glfwWindowHint(GLFW_DOUBLEBUFFER, 1);
+    GLFWwindow *window = glfwCreateWindow(640, 480, "N-Body", NULL, NULL);
+    if (!window)
+    {
+        LOG(LOG_ERROR, "Could not create window or context\n");
+        return NULL;
+    }
+
+    glfwMakeContextCurrent(window);
+
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    return window;
 }
 
 void error_callback(int error, const char *description)
@@ -283,6 +302,8 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
+    window_width = width;
+    window_height = height;
     glViewport(0, 0, width, height);
 }
 
@@ -339,7 +360,7 @@ static inline void initialize_camera(void)
 {
     cam.pos[0] = 0.0f;
     cam.pos[1] = 0.0f;
-    cam.pos[2] = P_RANGE*2.0;
+    cam.pos[2] = P_RANGE * 2.0;
     cam.front[0] = 0.0f;
     cam.front[1] = 0.0f;
     cam.front[2] = -1.0f;
@@ -362,7 +383,7 @@ static inline void initialize_camera(void)
 }
 
 #if (defined(__unix__) || USE_PTHREAD)
-void *dispatch_threads(void *)
+void *dispatch_threads(void *data)
 #else
 DWORD WINAPI dispatch_threads(void *data)
 #endif
@@ -374,16 +395,16 @@ DWORD WINAPI dispatch_threads(void *data)
     HANDLE thread[NUM_THREADS];
 #endif
     {
-        unsigned int n_size = NUM_PARTICLES / NUM_THREADS;
+        unsigned int n_size = num_particles / NUM_THREADS;
         for (int i = 0; i < NUM_THREADS; i++)
         {
             thread_arg *t_args = (thread_arg *)calloc(sizeof(thread_arg), 1);
-            t_args->particles = (Particle *)&particles;
+            t_args->particles = (Particle *)particles;
             t_args->start = i * n_size;
             t_args->end = t_args->start + n_size;
             if (i + 1 == NUM_THREADS)
             {
-                t_args->end = NUM_PARTICLES;
+                t_args->end = num_particles;
             }
             printf("%d <--> %d\n", t_args->start, t_args->end);
 #if defined(__unix__) || USE_PTHREAD
@@ -395,15 +416,18 @@ DWORD WINAPI dispatch_threads(void *data)
     }
 #endif
 #if USE_CUDA
-    init_cuda_tick(particles);
+    init_cuda_tick(particles, num_particles);
 #endif
     running = 1;
     while (running == 1)
     {
 #if NUM_THREADS == 0 && !USE_CUDA
-        tick();
+        compute_forces_newtonian(particles, num_particles, 0, num_particles, dt);
+        update_particles(particles, num_particles, 0, num_particles, dt);
+#elif USE_CUDA
+        cuda_tick(particles, (volatile int *)&running, num_particles, dt);
 #else
-        cuda_tick(particles, (volatile int *)&running);
+        __asm("nop");
 #endif
     }
 #if USE_CUDA
@@ -420,7 +444,11 @@ DWORD WINAPI dispatch_threads(void *data)
     }
 #endif
     tick_finished = 1;
-    return;
+#if (defined(__unix__) || USE_PTHREAD)
+    return NULL;
+#elif NUM_THREADS != 0
+    return 0;
+#endif
 }
 
 #if !USE_CUDA
@@ -445,20 +473,19 @@ void tick(void)
         while (sem_up != 0)
             ;
         ++sem_comp;
-        compute_forces_newtonian(args.particles, NUM_PARTICLES, args.start, args.end);
+        compute_forces_newtonian(args.particles, num_particles, args.start, args.end, dt);
         // compute_forces_schwarzschild_GR(particles, N, args.start, args.end);
         --sem_comp;
         while (sem_comp != 0)
             ;
         ++sem_up;
-        update_particles(args.particles, NUM_PARTICLES, args.start, args.end);
+        update_particles(args.particles, num_particles, args.start, args.end, dt);
         --sem_up;
     }
-#else
-    compute_forces_newtonian(particles, N, 0, N);
-    update_particles(particles, N, 0, N);
 #endif
-#if NUM_THREADS != 0
+#if (defined(__unix__) || USE_PTHREAD)
+    return NULL;
+#elif NUM_THREADS != 0
     return 0;
 #endif
 }
