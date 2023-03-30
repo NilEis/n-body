@@ -1,17 +1,18 @@
 cmake_minimum_required(VERSION 3.9.0)
 project(n-body VERSION 0.1.0 LANGUAGES C CUDA)
 
+
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    add_compile_options(-ffunction-sections -fdata-sections -march=native)
+add_compile_options(-ffunction-sections -fdata-sections -march=native)
 endif()
 
 OPTION (USE_OpenMP "Use OpenMP" ON)
 IF(USE_OpenMP)
-  FIND_PACKAGE(OpenMP)
-  IF(OPENMP_FOUND)
-    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-  ENDIF()
+FIND_PACKAGE(OpenMP)
+IF(OPENMP_FOUND)
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+ENDIF()
 ENDIF()
 
 add_subdirectory(extern/glfw)
@@ -31,6 +32,8 @@ ${CMAKE_CURRENT_SOURCE_DIR}/src/particle.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/camera.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/solver.c)
 
+set_property(TARGET n-body PROPERTY C_STANDARD 11)
+
 target_include_directories(n-body PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/)
 
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/shader/main.fs)
@@ -47,7 +50,9 @@ target_link_libraries(n-body glfw glad_gl_core_33 ma-log cglm)
 include(CheckIPOSupported)
 
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    target_link_options(n-body PRIVATE -Wl,--gc-sections)
+target_link_options(n-body PRIVATE -Wl,--gc-sections)
+elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+add_compile_definitions(USE_PTHREAD=0)
 endif()
 
 check_ipo_supported(RESULT result OUTPUT output LANGUAGES C)

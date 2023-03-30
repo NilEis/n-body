@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "particle.h"
 #include "camera.h"
+#include "defines.h"
 #define GLFW_INCLUDE_NONE
 #include "GLFW/glfw3.h"
 #include "glad/gl.h"
@@ -11,31 +12,29 @@
 #include "solver.h"
 
 #if NUM_THREADS != 0
+#ifdef __STDC_NO_ATOMICS__
+// Atomic :(
+int sem_comp = 0;
+int sem_up = 0;
+#else
 #include <stdatomic.h>
 atomic_uint sem_comp = ATOMIC_VAR_INIT(0);
 atomic_uint sem_up = ATOMIC_VAR_INIT(0);
 #endif
-
-#define NUM_THREADS 0
-#define USE_PTHREAD 0
-
-#if (defined(__unix__) || USE_PTHREAD) && NUM_THREADS != 0
-#include <pthread.h>
-#elif NUM_THREADS != 0
-#include <windows.h>
 #endif
 
-#define WINDOW_WIDTH 600
-#define WINDOW_HEIGHT 400
-#define N 50
-#define P_RANGE 50.0
-
-#if (defined(__unix__) || USE_PTHREAD) && NUM_THREADS != 0
+#if NUM_THREADS != 0 && !USE_CUDA
+#if (defined(__unix__) || USE_PTHREAD)
+#include <pthread.h>
 void *tick(void *data);
-#elif NUM_THREADS != 0
+#elif !defined(__unix__)
+#include <windows.h>
 DWORD WINAPI tick(void *data);
 #else
 void tick(void);
+#endif
+#elif USE_CUDA
+
 #endif
 typedef struct
 {
@@ -44,7 +43,7 @@ typedef struct
     unsigned int end;
 } thread_arg;
 
-Particle particles[N] = {0};
+Particle particles[NUM_PARTICLES] = {0};
 
 void error_callback(int error, const char *description);
 
@@ -67,7 +66,7 @@ static struct
 int main()
 {
     initialize_camera();
-    fill_particles_random((Particle *)&particles, N, (vec3_t){-P_RANGE, -P_RANGE, -P_RANGE}, (vec3_t){P_RANGE, P_RANGE, P_RANGE});
+    fill_particles_random((Particle *)&particles, NUM_PARTICLES, (vec3_t){-P_RANGE, -P_RANGE, -P_RANGE}, (vec3_t){P_RANGE, P_RANGE, P_RANGE});
     // Init GLFW
     if (!glfwInit())
     {
@@ -97,17 +96,14 @@ int main()
     glm_mat4_identity(model_mat);
     mat4 view_mat = {0};
     mat4 proj_mat = {0};
-#if (defined(__unix__) || USE_PTHREAD) && NUM_THREADS != 0
+#if NUM_THREADS != 0 && !USE_CUDA
+#if (defined(__unix__) || USE_PTHREAD)
     pthread_t thread[NUM_THREADS];
-#elif NUM_THREADS != 0
+#elif !defined(__unix__)
     HANDLE thread[NUM_THREADS];
 #endif
     {
-#if NUM_THREADS == 0
-        unsigned int n_size = 0;
-#else
-        unsigned int n_size = N / NUM_THREADS;
-#endif
+        unsigned int n_size = NUM_PARTICLES / NUM_THREADS;
         for (int i = 0; i < NUM_THREADS; i++)
         {
             thread_arg *t_args = (thread_arg *)calloc(sizeof(thread_arg), 1);
@@ -116,16 +112,17 @@ int main()
             t_args->end = t_args->start + n_size;
             if (i + 1 == NUM_THREADS)
             {
-                t_args->end = N;
+                t_args->end = NUM_PARTICLES;
             }
             printf("%d <--> %d\n", t_args->start, t_args->end);
-#if (defined(__unix__) || USE_PTHREAD) && NUM_THREADS != 0
+#if defined(__unix__) || USE_PTHREAD
             pthread_create(&thread[i], NULL, tick, (void *)t_args);
-#elif NUM_THREADS != 0
+#elif !defined(__unix__)
             thread[i] = CreateThread(NULL, 0, tick, (void *)t_args, 0, NULL);
 #endif
         }
     }
+#endif
     GLuint VBO, VAO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -142,7 +139,7 @@ int main()
         // printf("%f\n", delta_time.dt);
         // printf("%f,%f,%f - %f,%f,%f\n", particles[0].pos.x, particles[0].pos.y, particles[0].pos.z, particles[0].vel.x, particles[0].vel.y, particles[0].vel.z);
         process_input(window);
-#if NUM_THREADS == 0
+#if NUM_THREADS == 0 && USE_CUDA == 0
         tick();
 #endif
         // fill_particles_random((Particle *)&particles, N, (vec3_t){-10.0, -10.0, -10.0}, (vec3_t){10.0, 10.0, 10.0});
@@ -157,25 +154,27 @@ int main()
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         // Set the vertex attribute pointers
         glVertexAttribPointer(0, 3, GL_DOUBLE, GL_FALSE, sizeof(Particle), (void *)0);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * N, particles, GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * NUM_PARTICLES, particles, GL_DYNAMIC_DRAW);
         glEnableVertexAttribArray(0);
 
         // Draw the particles as points
         glBindVertexArray(VAO);
         glPointSize(1.0f); // Set the size of the points
-        glDrawArrays(GL_POINTS, 0, N);
+        glDrawArrays(GL_POINTS, 0, NUM_PARTICLES);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
+#if NUM_THREADS != 0 && !USE_CUDA
     for (int i = 0; i < NUM_THREADS; i++)
     {
-#if (defined(__unix__) || USE_PTHREAD) && NUM_THREADS != 0
+#if (defined(__unix__) || USE_PTHREAD)
         pthread_cancel(thread[i]);
-#elif NUM_THREADS != 0
+#elif !defined(__unix__)
         CloseHandle(thread[i]);
 #endif
     }
+#endif
     glDeleteProgram(shader_prog);
     glfwDestroyWindow(window);
     glfwTerminate();
@@ -317,6 +316,8 @@ static inline void initialize_camera(void)
     cam.v = 5.0f;
     cam.Zoom = 45.0f;
 }
+
+#if !USE_CUDA
 #if (defined(__unix__) || USE_PTHREAD) && NUM_THREADS != 0
 void *tick(void *data)
 #elif NUM_THREADS != 0
@@ -338,13 +339,13 @@ void tick(void)
         while (sem_up != 0)
             ;
         ++sem_comp;
-        compute_forces_newtonian(args.particles, N, args.start, args.end);
+        compute_forces_newtonian(args.particles, NUM_PARTICLES, args.start, args.end);
         // compute_forces_schwarzschild_GR(particles, N, args.start, args.end);
         --sem_comp;
         while (sem_comp != 0)
             ;
         ++sem_up;
-        update_particles(args.particles, N, args.start, args.end);
+        update_particles(args.particles, NUM_PARTICLES, args.start, args.end);
         --sem_up;
     }
 #else
@@ -355,3 +356,4 @@ void tick(void)
     return 0;
 #endif
 }
+#endif
