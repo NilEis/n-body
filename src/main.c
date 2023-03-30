@@ -9,26 +9,41 @@
 #include "ma-log.h"
 #include "cglm/cglm.h"
 #include "shader.h"
-#include "solver.h"
 
-#if NUM_THREADS != 0
+#if USE_CUDA
+#include "cuda_tick.h"
+#else
+#if defined(__unix__) && !USE_PTHREAD
+#error "PTHREAD is needed"
+#endif
+#include "solver.h"
+#endif
+
+volatile int running = 0;
+volatile int tick_finished = 0;
+
 #ifdef __STDC_NO_ATOMICS__
 // Atomic :(
-int sem_comp = 0;
-int sem_up = 0;
+volatile int sem_comp = 0;
+volatile int sem_up = 0;
 #else
 #include <stdatomic.h>
 atomic_uint sem_comp = ATOMIC_VAR_INIT(0);
 atomic_uint sem_up = ATOMIC_VAR_INIT(0);
 #endif
+
+#if (defined(__unix__) || USE_PTHREAD)
+#include <pthread.h>
+void *dispatch_threads(void *);
+#else
+#include <windows.h>
+DWORD WINAPI dispatch_threads(void *data);
 #endif
 
 #if NUM_THREADS != 0 && !USE_CUDA
 #if (defined(__unix__) || USE_PTHREAD)
-#include <pthread.h>
 void *tick(void *data);
 #elif !defined(__unix__)
-#include <windows.h>
 DWORD WINAPI tick(void *data);
 #else
 void tick(void);
@@ -49,6 +64,7 @@ void error_callback(int error, const char *description);
 
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
+void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void process_input(GLFWwindow *window);
 
 GLuint create_shader_prog(void);
@@ -65,9 +81,12 @@ static struct
 
 int main()
 {
+    LOG(LOG_INFO, "Initialize camera\n");
     initialize_camera();
+    LOG(LOG_INFO, "Create Particles\n");
     fill_particles_random((Particle *)&particles, NUM_PARTICLES, (vec3_t){-P_RANGE, -P_RANGE, -P_RANGE}, (vec3_t){P_RANGE, P_RANGE, P_RANGE});
     // Init GLFW
+    LOG(LOG_INFO, "Init GLFW\n");
     if (!glfwInit())
     {
         LOG(LOG_ERROR, "Could not initialize glfw\n");
@@ -85,51 +104,46 @@ int main()
 
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
+    LOG(LOG_INFO, "Init GLAD\n");
     gladLoadGL(glfwGetProcAddress);
 
+    LOG(LOG_INFO, "Load Shader\n");
     GLuint shader_prog = create_shader_prog();
 
     mat4 model_mat = {0};
     glm_mat4_identity(model_mat);
     mat4 view_mat = {0};
     mat4 proj_mat = {0};
-#if NUM_THREADS != 0 && !USE_CUDA
+    LOG(LOG_INFO, "Dispatch tick thread\n");
 #if (defined(__unix__) || USE_PTHREAD)
-    pthread_t thread[NUM_THREADS];
+    pthread_t thread;
+    pthread_create(&thread, NULL, dispatch_threads, NULL);
 #elif !defined(__unix__)
-    HANDLE thread[NUM_THREADS];
-#endif
-    {
-        unsigned int n_size = NUM_PARTICLES / NUM_THREADS;
-        for (int i = 0; i < NUM_THREADS; i++)
-        {
-            thread_arg *t_args = (thread_arg *)calloc(sizeof(thread_arg), 1);
-            t_args->particles = (Particle *)&particles;
-            t_args->start = i * n_size;
-            t_args->end = t_args->start + n_size;
-            if (i + 1 == NUM_THREADS)
-            {
-                t_args->end = NUM_PARTICLES;
-            }
-            printf("%d <--> %d\n", t_args->start, t_args->end);
-#if defined(__unix__) || USE_PTHREAD
-            pthread_create(&thread[i], NULL, tick, (void *)t_args);
-#elif !defined(__unix__)
-            thread[i] = CreateThread(NULL, 0, tick, (void *)t_args, 0, NULL);
-#endif
-        }
-    }
+    HANDLE thread;
+    thread = CreateThread(NULL, 0, dispatch_threads, NULL, 0, NULL);
 #endif
     GLuint VBO, VAO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
 
+    LOG(LOG_INFO, "Start main loop\n");
     // Bind the vertex array object and vertex buffer object
-    while (!glfwWindowShouldClose(window))
+    while (!tick_finished)
     {
+        if (glfwWindowShouldClose(window))
+        {
+            static stop_called = 1;
+            if (stop_called)
+            {
+                running = 0;
+                LOG(LOG_INFO, "Waiting for tick thread\n");
+                stop_called = 0;
+            }
+        }
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glUseProgram(shader_prog);
 
@@ -139,9 +153,6 @@ int main()
         // printf("%f\n", delta_time.dt);
         // printf("%f,%f,%f - %f,%f,%f\n", particles[0].pos.x, particles[0].pos.y, particles[0].pos.z, particles[0].vel.x, particles[0].vel.y, particles[0].vel.z);
         process_input(window);
-#if NUM_THREADS == 0 && USE_CUDA == 0
-        tick();
-#endif
         // fill_particles_random((Particle *)&particles, N, (vec3_t){-10.0, -10.0, -10.0}, (vec3_t){10.0, 10.0, 10.0});
         glm_lookat(cam.pos, cam.center, cam.up, view_mat);
         glm_perspective(radians(cam.fov), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 10000000.0f, proj_mat);
@@ -165,19 +176,17 @@ int main()
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
-#if NUM_THREADS != 0 && !USE_CUDA
-    for (int i = 0; i < NUM_THREADS; i++)
-    {
+    LOG(LOG_INFO, "Stopped main loop\n");
 #if (defined(__unix__) || USE_PTHREAD)
-        pthread_cancel(thread[i]);
-#elif !defined(__unix__)
-        CloseHandle(thread[i]);
+    pthread_join(thread, NULL);
+#else
+    WaitForSingleObject(thread, INFINITE);
 #endif
-    }
-#endif
+    LOG(LOG_INFO, "Tick thread stopped\n");
     glDeleteProgram(shader_prog);
     glfwDestroyWindow(window);
     glfwTerminate();
+    LOG(LOG_INFO, "Stopping\n");
     return 0;
 }
 
@@ -235,11 +244,46 @@ void process_input(GLFWwindow *window)
     {
         move_camera(&cam, CAMERA_RIGHT, delta_time.dt);
     }
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+    {
+        if (!cam.mouse.visible)
+        {
+            cam.mouse.visible = 1;
+            cam.mouse.visible_set = 0;
+        }
+    }
+    else
+    {
+        if (cam.mouse.visible)
+        {
+            cam.mouse.visible = 0;
+            cam.mouse.visible_set = 0;
+        }
+    }
+    if (!cam.mouse.visible_set)
+    {
+        if (cam.mouse.visible)
+        {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            cam.mouse.visible = 1;
+        }
+        else
+        {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            cam.mouse.visible = 0;
+        }
+        cam.mouse.visible_set = 1;
+    }
 }
 
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
     camera_scroll(&cam, yoffset);
+}
+
+void framebuffer_size_callback(GLFWwindow *window, int width, int height)
+{
+    glViewport(0, 0, width, height);
 }
 
 GLuint create_shader_prog(void)
@@ -295,7 +339,7 @@ static inline void initialize_camera(void)
 {
     cam.pos[0] = 0.0f;
     cam.pos[1] = 0.0f;
-    cam.pos[2] = P_RANGE;
+    cam.pos[2] = P_RANGE*2.0;
     cam.front[0] = 0.0f;
     cam.front[1] = 0.0f;
     cam.front[2] = -1.0f;
@@ -313,8 +357,70 @@ static inline void initialize_camera(void)
     cam.mouse.last_y = 0.0f;
     cam.mouse.sensitivity = 0.1f;
     cam.mouse.first_mouse_event = 1;
-    cam.v = 5.0f;
+    cam.v = P_RANGE / 10.0;
     cam.Zoom = 45.0f;
+}
+
+#if (defined(__unix__) || USE_PTHREAD)
+void *dispatch_threads(void *)
+#else
+DWORD WINAPI dispatch_threads(void *data)
+#endif
+{
+#if NUM_THREADS != 0 && !USE_CUDA
+#if (defined(__unix__) || USE_PTHREAD)
+    pthread_t thread[NUM_THREADS];
+#elif !defined(__unix__)
+    HANDLE thread[NUM_THREADS];
+#endif
+    {
+        unsigned int n_size = NUM_PARTICLES / NUM_THREADS;
+        for (int i = 0; i < NUM_THREADS; i++)
+        {
+            thread_arg *t_args = (thread_arg *)calloc(sizeof(thread_arg), 1);
+            t_args->particles = (Particle *)&particles;
+            t_args->start = i * n_size;
+            t_args->end = t_args->start + n_size;
+            if (i + 1 == NUM_THREADS)
+            {
+                t_args->end = NUM_PARTICLES;
+            }
+            printf("%d <--> %d\n", t_args->start, t_args->end);
+#if defined(__unix__) || USE_PTHREAD
+            pthread_create(&thread[i], NULL, tick, (void *)t_args);
+#elif !defined(__unix__)
+            thread[i] = CreateThread(NULL, 0, tick, (void *)t_args, 0, NULL);
+#endif
+        }
+    }
+#endif
+#if USE_CUDA
+    init_cuda_tick(particles);
+#endif
+    running = 1;
+    while (running == 1)
+    {
+#if NUM_THREADS == 0 && !USE_CUDA
+        tick();
+#else
+        cuda_tick(particles, (volatile int *)&running);
+#endif
+    }
+#if USE_CUDA
+    free_cuda_tick();
+#endif
+#if NUM_THREADS != 0 && !USE_CUDA
+    for (int i = 0; i < NUM_THREADS; i++)
+    {
+#if (defined(__unix__) || USE_PTHREAD)
+        pthread_cancel(thread[i]);
+#elif !defined(__unix__)
+        CloseHandle(thread[i]);
+#endif
+    }
+#endif
+    tick_finished = 1;
+    return;
 }
 
 #if !USE_CUDA

@@ -1,5 +1,6 @@
 #ifndef VEC3_H
 #define VEC3_H
+#include "defines.h"
 
 typedef double vec3_m_t;
 
@@ -35,5 +36,6 @@ vec3_m_t vec3_length(vec3_t v);
 vec3_t vec3_normalize(vec3_t v);
 
 vec3_t random_vec3(vec3_m_t min_val, vec3_m_t max_val);
+#else
 
 #endif // VEC3_H

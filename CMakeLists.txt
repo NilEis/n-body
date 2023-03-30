@@ -30,9 +30,11 @@ ${CMAKE_CURRENT_SOURCE_DIR}/src/octree.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/vec3.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/particle.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/camera.c
-${CMAKE_CURRENT_SOURCE_DIR}/src/solver.c)
+${CMAKE_CURRENT_SOURCE_DIR}/src/solver.c
+${CMAKE_CURRENT_SOURCE_DIR}/src/cuda_tick.cu)
 
 set_property(TARGET n-body PROPERTY C_STANDARD 11)
+set_target_properties(n-body PROPERTIES CUDA_ARCHITECTURES "all")
 
 target_include_directories(n-body PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/)
 

@@ -31,6 +31,8 @@ typedef struct
         float last_y;
         float sensitivity;
         char first_mouse_event;
+        char visible;
+        char visible_set;
     } mouse;
     float v;
     float Zoom;
