@@ -12,6 +12,8 @@
 
 #if USE_CUDA
 #include "cuda_tick.h"
+#elif USE_OPENCL
+#include "opencl_tick.h"
 #else
 #if defined(__unix__) && !USE_PTHREAD
 #error "PTHREAD is needed"
@@ -40,7 +42,7 @@ void *dispatch_threads(void *);
 DWORD WINAPI dispatch_threads(void *data);
 #endif
 
-#if NUM_THREADS != 0 && !USE_CUDA
+#if NUM_THREADS != 0 && !USE_CUDA && !USE_OPENCL
 #if (defined(__unix__) || USE_PTHREAD)
 void *tick(void *data);
 #elif !defined(__unix__)
@@ -69,6 +71,8 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void process_input(GLFWwindow *window);
 
+static void print_particles(void);
+
 GLuint create_shader_prog(void);
 
 static inline void initialize_camera(void);
@@ -76,7 +80,7 @@ static inline void initialize_camera(void);
 static camera cam = {0};
 
 static int num_particles = 1500;
-static double dt = 0.1;
+static double dt = 0.01;
 
 static int window_width = 600;
 static int window_height = 400;
@@ -97,6 +101,7 @@ int main(int argc, char *argv[])
     initialize_camera();
     LOG(LOG_INFO, "Create Particles\n");
     particles = (Particle *)calloc(num_particles, sizeof(Particle));
+    LOG(LOG_INFO, "Allocated %d bytes\n", num_particles * sizeof(Particle));
     fill_particles_random(particles, num_particles, (vec3_t){-P_RANGE, -P_RANGE, -P_RANGE}, (vec3_t){P_RANGE, P_RANGE, P_RANGE});
 
     GLFWwindow *window = initGLFW();
@@ -112,6 +117,7 @@ int main(int argc, char *argv[])
     mat4 view_mat = {0};
     mat4 proj_mat = {0};
     LOG(LOG_INFO, "Dispatch tick thread\n");
+    //print_particles();
 #if (defined(__unix__) || USE_PTHREAD)
     pthread_t thread;
     pthread_create(&thread, NULL, dispatch_threads, NULL);
@@ -122,7 +128,6 @@ int main(int argc, char *argv[])
     GLuint VBO, VAO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
-
     LOG(LOG_INFO, "Start main loop\n");
     // Bind the vertex array object and vertex buffer object
     while (!tick_finished)
@@ -176,6 +181,7 @@ int main(int argc, char *argv[])
     glDeleteProgram(shader_prog);
     glfwDestroyWindow(window);
     glfwTerminate();
+    free(particles);
     LOG(LOG_INFO, "Stopping\n");
     return 0;
 }
@@ -243,6 +249,11 @@ void process_input(GLFWwindow *window)
         glfwSetWindowShouldClose(window, 1);
     }
 
+    if (glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS)
+    {
+        print_particles();
+    }
+
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
     {
         cam.boost = 2;
@@ -307,6 +318,13 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     glViewport(0, 0, width, height);
 }
 
+static void print_particles(void)
+{
+    for (int i = 0; i < num_particles; i++)
+    {
+        LOG(LOG_INFO, "Particle %d: mass: %f - x: %f, y: %f, z: %f - vx: %f, vy: %f, vz: %f\n", i, particles[i].mass, particles[i].pos.x, particles[i].pos.y, particles[i].pos.z, particles[i].vel.x, particles[i].vel.y, particles[i].vel.z);
+    }
+}
 GLuint create_shader_prog(void)
 {
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -388,7 +406,7 @@ void *dispatch_threads(void *data)
 DWORD WINAPI dispatch_threads(void *data)
 #endif
 {
-#if NUM_THREADS != 0 && !USE_CUDA
+#if NUM_THREADS != 0 && !USE_CUDA && !USE_OPENCL
 #if (defined(__unix__) || USE_PTHREAD)
     pthread_t thread[NUM_THREADS];
 #elif !defined(__unix__)
@@ -417,23 +435,29 @@ DWORD WINAPI dispatch_threads(void *data)
 #endif
 #if USE_CUDA
     init_cuda_tick(particles, num_particles);
+#elif USE_OPENCL
+    init_opencl_tick(particles, num_particles);
 #endif
     running = 1;
     while (running == 1)
     {
-#if NUM_THREADS == 0 && !USE_CUDA
+#if NUM_THREADS == 0 && !USE_CUDA && !USE_OPENCL
         compute_forces_newtonian(particles, num_particles, 0, num_particles, dt);
         update_particles(particles, num_particles, 0, num_particles, dt);
 #elif USE_CUDA
         cuda_tick(particles, (volatile int *)&running, num_particles, dt);
+#elif USE_OPENCL
+        opencl_tick(particles, (volatile int *)&running, num_particles, dt);
 #else
         __asm("nop");
 #endif
     }
 #if USE_CUDA
     free_cuda_tick();
+#elif USE_OPENCL
+    free_opencl_tick();
 #endif
-#if NUM_THREADS != 0 && !USE_CUDA
+#if NUM_THREADS != 0 && !USE_CUDA && !USE_OPENCL
     for (int i = 0; i < NUM_THREADS; i++)
     {
 #if (defined(__unix__) || USE_PTHREAD)
@@ -451,7 +475,7 @@ DWORD WINAPI dispatch_threads(void *data)
 #endif
 }
 
-#if !USE_CUDA
+#if !USE_CUDA && !USE_OPENCL
 #if (defined(__unix__) || USE_PTHREAD) && NUM_THREADS != 0
 void *tick(void *data)
 #elif NUM_THREADS != 0

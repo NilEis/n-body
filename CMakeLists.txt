@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.9.0)
 project(n-body VERSION 0.1.0 LANGUAGES C)
 
-option(USE_CUDA "Use cuda" ON)
+option(USE_CUDA "Use cuda" OFF)
+option(USE_OPENCL "Use opencl" ON)
 
 
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
@@ -18,25 +19,35 @@ set(GLAD_SOURCES_DIR "${PROJECT_SOURCE_DIR}/extern/glad/")
 add_subdirectory("${GLAD_SOURCES_DIR}/cmake" glad_cmake)
 glad_add_library(glad_gl_core_33 REPRODUCIBLE API gl:core=3.3)
 
-if(USE_CUDA)
-    enable_language(CUDA)
-    add_compile_definitions(USE_CUDA=1)
-    add_executable(n-body ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/octree.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/vec3.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/particle.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/camera.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda_tick.cu
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/solver.c)
+set(link_list glfw glad_gl_core_33 ma-log cglm)
+
+set(source_files ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
+${CMAKE_CURRENT_SOURCE_DIR}/src/octree.c
+${CMAKE_CURRENT_SOURCE_DIR}/src/vec3.c
+${CMAKE_CURRENT_SOURCE_DIR}/src/particle.c
+${CMAKE_CURRENT_SOURCE_DIR}/src/camera.c
+${CMAKE_CURRENT_SOURCE_DIR}/src/solver.c)
+
+if(USE_OPENCL AND NOT USE_CUDA)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/opencl_kernel.cl)
+    file(READ ${CMAKE_SOURCE_DIR}/src/opencl_kernel.cl opencl_kernel_cl_file)
+    string(REPLACE "\n" "\\n\"\\\n\"" opencl_kernel_cl "${opencl_kernel_cl_file}")
+    configure_file(${CMAKE_SOURCE_DIR}/include/opencl_kernel.h.in ${CMAKE_SOURCE_DIR}/include/opencl_kernel.h @ONLY)
+    add_compile_definitions(USE_CUDA=0 USE_OPENCL=1)
+    find_package(OpenCL REQUIRED)
+    list(APPEND source_files ${CMAKE_CURRENT_SOURCE_DIR}/src/opencl_tick.c)
+    list(APPEND link_list OpenCL::OpenCL)
 else()
-    add_executable(n-body ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/octree.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/vec3.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/particle.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/camera.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/solver.c)
 
 endif()
+if(USE_CUDA AND NOT USE_OPENCL)
+    enable_language(CUDA)
+    add_compile_definitions(USE_CUDA=1)
+    list(APPEND source_files ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda_tick.cu)
+else()
+    
+endif()
+add_executable(n-body ${source_files})
 
 set_property(TARGET n-body PROPERTY C_STANDARD 11)
 set_target_properties(n-body PROPERTIES CUDA_ARCHITECTURES "all")
@@ -52,7 +63,7 @@ string(REPLACE "\n" "\\n\"\\\n\"" SHADER_vs "${SHADER_vs_file}")
 
 configure_file(${CMAKE_SOURCE_DIR}/include/shader.h.in ${CMAKE_SOURCE_DIR}/include/shader.h @ONLY)
 
-target_link_libraries(n-body glfw glad_gl_core_33 ma-log cglm)
+target_link_libraries(n-body ${link_list})
 
 include(CheckIPOSupported)
 

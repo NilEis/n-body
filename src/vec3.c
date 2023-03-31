@@ -1,7 +1,7 @@
 #include "vec3.h"
 #include <stdlib.h>
 #include <math.h>
-#if defined(__AVX2__)
+#if defined(__AVX2__) && 0
 #include <immintrin.h>
 
 vec3_t vec3_add(vec3_t a, vec3_t b)

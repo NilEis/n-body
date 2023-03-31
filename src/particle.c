@@ -12,9 +12,16 @@ void fill_particles_random(Particle *particles, int n, vec3_t min_pos, vec3_t ma
         particles[i].pos.z = min_pos.z + (max_pos.z - min_pos.z) * ((double)rand() / RAND_MAX);
 
         particles[i].pos = vec3_mul((((double)rand() / RAND_MAX) * max_pos.x) + 5.0, vec3_normalize(particles[i].pos));
+        particles[i].pos.y /= 5.0;
 
-        particles[i].vel = vec3_mul(vec3_length(particles[i].pos) / (max_pos.x + 5.0), vec3_mul(100, vec3_normalize(vec3_cross(particles[i].pos, (vec3_t){0, 1, 0}))));
-
+        if (vec3_length(particles[i].pos) <= 15)
+        {
+            particles[i].vel = vec3_mul(500, vec3_normalize(vec3_cross(vec3_normalize(particles[i].pos), (vec3_t){0.0, 1.0, 0.0})));
+        }
+        else
+        {
+            particles[i].vel = vec3_mul(100, vec3_normalize(vec3_cross(vec3_normalize(particles[i].pos), (vec3_t){0.0, 1.0, 0.0})));
+        }
         particles[i].mass = 1000 + rand() % 50;
         particles[i].mass = particles[i].mass == 0.0 ? 1.0 : particles[i].mass;
     }

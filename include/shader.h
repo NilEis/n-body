@@ -6,7 +6,7 @@
 "out vec4 FragColor;\n"\
 "\n"\
 "void main() {\n"\
-"    FragColor = vec4(1.0);\n"\
+"    FragColor = vec4(gl_FragCoord.xyz,1.0);\n"\
 "}"
 const char const *basic_shader_fs = SHADER_fs;
 #undef SHADER_fs

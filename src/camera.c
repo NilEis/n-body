@@ -20,7 +20,7 @@ void update_camera(camera *cam)
 
 void move_camera(camera *cam, camera_dir_e d, double dt)
 {
-    double v = cam->v * cam->boost * dt*10;
+    double v = cam->v * cam->boost * dt * 10;
     if (d == CAMERA_FORWARD)
     {
         vec3 tmp = {0};
@@ -67,7 +67,7 @@ void camera_update_mouse(camera *cam, double offset_x, double offset_y)
 
 void camera_scroll(camera *cam, double offset)
 {
-    cam->v += offset;
+    cam->v *= 1.25 * offset;
     if (cam->v < 1.0f)
         cam->v = 1.0f;
 }
