@@ -25,6 +25,7 @@ volatile int paused = 0;
 volatile int running = 0;
 volatile int tick_finished = 0;
 volatile int time_steps = 1;
+volatile int initialised = 0;
 
 #ifdef __STDC_NO_ATOMICS__
 // Atomic :(
@@ -60,7 +61,13 @@ typedef struct
     Particle *particles;
     unsigned int start;
     unsigned int end;
-} thread_arg;
+} tick_thread_arg;
+
+typedef struct
+{
+    GLuint bufferobj;
+    GLFWwindow *window;
+} dispatcher_thread_args;
 
 Particle *particles = NULL;
 
@@ -111,6 +118,10 @@ int main(int argc, char *argv[])
     LOG(LOG_INFO, "Init GLAD\n");
     gladLoadGL(glfwGetProcAddress);
 
+    const GLubyte *vendor = glGetString(GL_VENDOR); // Returns the vendor
+    const GLubyte *renderer = glGetString(GL_RENDERER);
+    LOG(LOG_INFO, "%s - %s\n", vendor, renderer);
+
     LOG(LOG_INFO, "Load Shader\n");
     GLuint shader_prog = create_shader_prog();
 
@@ -118,18 +129,36 @@ int main(int argc, char *argv[])
     glm_mat4_identity(model_mat);
     mat4 view_mat = {0};
     mat4 proj_mat = {0};
+    GLuint VBO, VAO;
+    // Copy the particle data to the buffer
+    // Set the vertex attribute pointers
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
+    glGenVertexArrays(1, &VAO);
+    glBindVertexArray(VAO);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_DOUBLE, GL_FALSE, sizeof(Particle), (void *)0);
     LOG(LOG_INFO, "Dispatch tick thread\n");
-    // print_particles();
+// print_particles();
+#if USE_OPENCL
+    dispatcher_thread_args dispatch_args = {
+        .bufferobj = VBO,
+        .window = window};
+#else
+    dispatcher_thread_args dispatch_args = {0};
+#endif
 #if (defined(__unix__) || USE_PTHREAD)
     pthread_t thread;
-    pthread_create(&thread, NULL, dispatch_threads, NULL);
+    pthread_create(&thread, NULL, dispatch_threads, (void *)&dispatch_args);
 #elif !defined(__unix__)
     HANDLE thread;
-    thread = CreateThread(NULL, 0, dispatch_threads, NULL, 0, NULL);
+    thread = CreateThread(NULL, 0, dispatch_threads, (void *)dispatch_args, 0, NULL);
 #endif
-    GLuint VBO, VAO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
+    while (!initialised)
+    {
+        ;
+    }
     LOG(LOG_INFO, "Start main loop\n");
     // Bind the vertex array object and vertex buffer object
     while (!tick_finished)
@@ -157,16 +186,10 @@ int main(int argc, char *argv[])
         glUniformMatrix4fv(glGetUniformLocation(shader_prog, "model"), 1, GL_FALSE, (const GLfloat *)model_mat);
         glUniformMatrix4fv(glGetUniformLocation(shader_prog, "view"), 1, GL_FALSE, (const GLfloat *)view_mat);
         glUniformMatrix4fv(glGetUniformLocation(shader_prog, "projection"), 1, GL_FALSE, (const GLfloat *)proj_mat);
-        // Copy the particle data to the buffer
-        glBindVertexArray(VAO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        // Set the vertex attribute pointers
-        glVertexAttribPointer(0, 3, GL_DOUBLE, GL_FALSE, sizeof(Particle), (void *)0);
+#if !!USE_OPENCL
         glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
-        glEnableVertexAttribArray(0);
-
+#endif
         // Draw the particles as points
-        glBindVertexArray(VAO);
         glPointSize(1.0f); // Set the size of the points
         glDrawArrays(GL_POINTS, 0, num_particles);
 
@@ -200,6 +223,17 @@ GLFWwindow *initGLFW(void)
     glfwSetErrorCallback(error_callback);
     // Create window and context
     glfwWindowHint(GLFW_DOUBLEBUFFER, 1);
+    GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode *mode = glfwGetVideoMode(monitor);
+    if (mode == NULL)
+    {
+        LOG(LOG_ERROR, "No monitor_mode?!\n");
+    }
+
+    glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+    glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+    glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+    glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
     GLFWwindow *window = glfwCreateWindow(640, 480, "N-Body", NULL, NULL);
     if (!window)
     {
@@ -439,7 +473,7 @@ DWORD WINAPI dispatch_threads(void *data)
         unsigned int n_size = num_particles / NUM_THREADS;
         for (int i = 0; i < NUM_THREADS; i++)
         {
-            thread_arg *t_args = (thread_arg *)calloc(sizeof(thread_arg), 1);
+            tick_thread_arg *t_args = (tick_thread_arg *)calloc(sizeof(tick_thread_arg), 1);
             t_args->particles = (Particle *)particles;
             t_args->start = i * n_size;
             t_args->end = t_args->start + n_size;
@@ -459,7 +493,7 @@ DWORD WINAPI dispatch_threads(void *data)
 #if USE_CUDA
     init_cuda_tick(particles, num_particles);
 #elif USE_OPENCL
-    init_opencl_tick(particles, num_particles);
+    init_opencl_tick(particles, num_particles, ((dispatcher_thread_args *)data)->bufferobj, ((dispatcher_thread_args *)data)->window, &initialised);
 #endif
     running = 1;
     while (running == 1)
@@ -517,10 +551,10 @@ void tick(void)
 #endif
 {
 #if NUM_THREADS != 0
-    thread_arg args = {0};
-    args.particles = ((thread_arg *)data)->particles;
-    args.start = ((thread_arg *)data)->start;
-    args.end = ((thread_arg *)data)->end;
+    tick_thread_arg args = {0};
+    args.particles = ((tick_thread_arg *)data)->particles;
+    args.start = ((tick_thread_arg *)data)->start;
+    args.end = ((tick_thread_arg *)data)->end;
     free(data);
 #endif
 #if NUM_THREADS != 0

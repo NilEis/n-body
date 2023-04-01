@@ -3,10 +3,11 @@
 #include "opencl_kernel.h"
 #include <stdlib.h>
 #include "defines.h"
+#include "glad/gl.h"
+#include <string.h>
 
 static cl_platform_id platform_id = NULL;
 static cl_device_id device_id = NULL;
-static cl_uint ret_num_devices = 0;
 static cl_uint ret_num_platforms = 0;
 static cl_context context = NULL;
 static cl_command_queue command_queue = NULL;
@@ -25,11 +26,37 @@ static void kernel_error(cl_int ret);
 static void arg_error(cl_int ret);
 static void enq_error(cl_int ret);
 
-void init_opencl_tick(Particle *p, int n)
+static void context_error_callback(const char *errinfo, const void *private_info, size_t cb, void *user_data);
+
+static cl_platform_id get_platform(const char *name, cl_int *ret);
+
+void init_opencl_tick(Particle *p, int n, GLuint buffobj, GLFWwindow *window, volatile int *init)
 {
     cl_int ret = 0;
     LOG(LOG_INFO, "Initialising OPENCL\n");
-    ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
+    platform_id = get_platform("Intel", &ret);
+    if (ret)
+    {
+        platform_id = get_platform("AMD", &ret);
+    }
+    if (ret)
+    {
+        platform_id = get_platform("NVIDIA", &ret);
+    }
+    if (ret)
+    {
+        platform_id = get_platform("Apple", &ret);
+    }
+    if (ret)
+    {
+        platform_id = get_platform("Clover", &ret);
+    }
+    if (ret)
+    {
+        LOG(LOG_TIME | LOG_FUNC, "No platform found\n");
+        exit(-1);
+    }
+    /* ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
     if (ret == CL_SUCCESS)
     {
         LOG(LOG_INFO, "clGetPlatformIDs success\n");
@@ -51,8 +78,37 @@ void init_opencl_tick(Particle *p, int n)
             LOG(LOG_TIME | LOG_FUNC, "Unknown error\n");
             break;
         }
+    } */
+    {
+        cl_uint ret_num_devices = 0;
+        device_id = (cl_device_id)-1;
+        ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 0, NULL, &ret_num_devices);
+        cl_device_id *devices = calloc(ret_num_devices, sizeof(cl_device_id));
+        ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, ret_num_devices * sizeof(cl_device_id), devices, &ret_num_devices);
+        for (int i = 0; i < ret_num_devices; i++)
+        {
+            size_t ret_size = 0;
+            clGetDeviceInfo(devices[i], CL_DEVICE_EXTENSIONS, 0, NULL, &ret_size);
+            char *retv = (char *)calloc(ret_size, sizeof(char));
+            clGetDeviceInfo(devices[i], CL_DEVICE_EXTENSIONS, ret_size * sizeof(char), retv, NULL);
+            if (ret_size != 0)
+            {
+                LOG(LOG_INFO, "DeviceInfo[%d]: %s\n", i, retv);
+                if (strstr(retv, "cl_khr_gl_sharing"))
+                {
+                    device_id = devices[i];
+                    free(retv);
+                    break;
+                }
+            }
+            free(retv);
+        }
+        if (device_id == (cl_device_id)-1)
+        {
+            LOG(LOG_TIME | LOG_FUNC, "No device found.\n");
+        }
+        //ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, &ret_num_devices);
     }
-    ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, &ret_num_devices);
     if (ret == CL_SUCCESS)
     {
         LOG(LOG_INFO, "clGetDeviceIDs success\n");
@@ -88,8 +144,23 @@ void init_opencl_tick(Particle *p, int n)
             LOG(LOG_TIME | LOG_FUNC, "Unknown error\n");
             break;
         }
+        exit(-1);
     }
-    context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ret);
+    cl_context_properties properties[] =
+        {
+#ifdef __unix__
+            CL_GL_CONTEXT_KHR, (cl_context_properties)glfwGetGLXContext(window),
+            CL_GLX_DISPLAY_KHR, (cl_context_properties)glfwGetX11Display(),
+            CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, // OpenCL platform object
+            0
+#else
+            CL_GL_CONTEXT_KHR, (cl_context_properties)glfwGetWGLContext(window),
+            CL_WGL_HDC_KHR, (cl_context_properties)GetDC(glfwGetWin32Window(window)),
+            CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, // OpenCL platform object
+            0
+#endif
+        };
+    context = clCreateContext(properties, 1, &device_id, context_error_callback, NULL, &ret);
     if (ret == CL_SUCCESS)
     {
         LOG(LOG_INFO, "clCreateContext success\n");
@@ -119,10 +190,17 @@ void init_opencl_tick(Particle *p, int n)
         case CL_OUT_OF_HOST_MEMORY:
             LOG(LOG_TIME | LOG_FUNC, "CL_OUT_OF_HOST_MEMORY: there is a failure to allocate resources required by the OpenCL implementation on the host.\n");
             break;
+        case CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR:
+            LOG(LOG_TIME | LOG_FUNC, "CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR.\n");
+            break;
+        case CL_INVALID_OPERATION:
+            LOG(LOG_TIME | LOG_FUNC, "CL_INVALID_OPERATION.\n");
+            break;
         default:
-            LOG(LOG_TIME | LOG_FUNC, "Unknown error\n");
+            LOG(LOG_TIME | LOG_FUNC, "Unknown error %d\n", ret);
             break;
         }
+        exit(-1);
     }
     command_queue = clCreateCommandQueueWithProperties(context, device_id, 0, &ret);
     if (ret == CL_SUCCESS)
@@ -155,9 +233,10 @@ void init_opencl_tick(Particle *p, int n)
             LOG(LOG_TIME | LOG_FUNC, "Unknown error\n");
             break;
         }
+        exit(-1);
     }
-    // cl_particles = clCreateBuffer(context, CL_MEM_COPY_HOST_PTR, n * sizeof(Particle), (void *)p, &ret);
-    cl_particles = clCreateBuffer(context, CL_MEM_READ_WRITE, n * sizeof(Particle), NULL, &ret);
+    cl_particles = clCreateFromGLBuffer(context, CL_MEM_READ_WRITE, buffobj, &ret);
+    /* cl_particles = clCreateBuffer(context, CL_MEM_READ_WRITE, n * sizeof(Particle), NULL, &ret);
     if (ret == CL_SUCCESS)
     {
         LOG(LOG_INFO, "clCreateBuffer success - %d bytes\n", n * sizeof(Particle));
@@ -191,7 +270,7 @@ void init_opencl_tick(Particle *p, int n)
             LOG(LOG_TIME | LOG_FUNC, "Unknown error\n");
             break;
         }
-    }
+    } */
     ret = clEnqueueWriteBuffer(command_queue, cl_particles, CL_TRUE, 0, n * sizeof(Particle), p, 0, NULL, NULL);
     if (ret == CL_SUCCESS)
     {
@@ -239,6 +318,7 @@ void init_opencl_tick(Particle *p, int n)
             LOG(LOG_TIME | LOG_FUNC, "Unknown error\n");
             break;
         }
+        exit(-1);
     }
     program = clCreateProgramWithSource(context, 1, (const char **)&opencl_kernel_source, (const size_t *)&opencl_kernel_source_size, &ret);
     if (ret == CL_SUCCESS)
@@ -265,6 +345,7 @@ void init_opencl_tick(Particle *p, int n)
             LOG(LOG_TIME | LOG_FUNC, "Unknown error\n");
             break;
         }
+        exit(-1);
     }
     ret = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
     if (ret == CL_SUCCESS)
@@ -309,6 +390,7 @@ void init_opencl_tick(Particle *p, int n)
             LOG(LOG_TIME | LOG_FUNC, "Unknown error\n");
             break;
         }
+        exit(-1);
     }
     LOG(LOG_INFO, "Creating Kernel\n");
     kernel_solve = clCreateKernel(program, "newtonianSolver", &ret);
@@ -335,6 +417,7 @@ void init_opencl_tick(Particle *p, int n)
     local_work_size_update = n < kernel_work_group_size ? n : kernel_work_group_size;
     // global_work_size_update = n % local_work_size_update == 0 ? n / local_work_size_update : (n / local_work_size_update) + 1;
     LOG(LOG_INFO, "Using %d blocks with %d threads = %d for update\n", global_work_size_update, local_work_size_update, local_work_size_update * global_work_size_update);
+    *init = 1;
 }
 
 static void arg_error(cl_int ret)
@@ -377,6 +460,7 @@ static void arg_error(cl_int ret)
             LOG(LOG_TIME | LOG_FUNC, "Unknown error\n");
             break;
         }
+        exit(-1);
     }
 }
 
@@ -445,6 +529,7 @@ static void enq_error(cl_int ret)
             LOG(LOG_TIME | LOG_FUNC, "Unknown error\n");
             break;
         }
+        exit(-1);
     }
 }
 
@@ -478,6 +563,7 @@ static void kernel_error(cl_int ret)
         default:
             LOG(LOG_TIME | LOG_FUNC, "Unknown error\n");
         }
+        exit(-1);
     }
 }
 
@@ -500,7 +586,7 @@ void opencl_tick(Particle *p, volatile int *running, int n, double dt, int time_
         ret = clEnqueueNDRangeKernel(command_queue, kernel_update, 1, 0, &global_size, NULL, 0, NULL, NULL);
         enq_error(ret);
     }
-    ret = clEnqueueReadBuffer(command_queue, cl_particles, CL_TRUE, 0, n * sizeof(Particle), p, 0, NULL, NULL);
+    //ret = clEnqueueReadBuffer(command_queue, cl_particles, CL_TRUE, 0, n * sizeof(Particle), p, 0, NULL, NULL);
 }
 
 void free_opencl_tick(void)
@@ -514,4 +600,37 @@ void free_opencl_tick(void)
     ret = clReleaseMemObject(cl_particles);
     ret = clReleaseCommandQueue(command_queue);
     ret = clReleaseContext(context);
+}
+
+static cl_platform_id get_platform(const char *name, cl_int *ret)
+{
+    cl_uint ret_size = 0;
+    clGetPlatformIDs(0, NULL, &ret_size);
+    cl_platform_id *platforms = (cl_platform_id *)calloc(ret_size, sizeof(cl_platform_id));
+    clGetPlatformIDs(ret_size, platforms, &ret_size);
+    for (int i = 0; i < ret_size; i++)
+    {
+        size_t c_ret_size = 0;
+        clGetPlatformInfo(platforms[i], CL_PLATFORM_NAME, 0, NULL, &c_ret_size);
+        char *retv = calloc(c_ret_size, sizeof(char));
+        clGetPlatformInfo(platforms[i], CL_PLATFORM_NAME, c_ret_size, retv, &c_ret_size);
+        if (c_ret_size != 0)
+        {
+            if (strstr(retv, name))
+            {
+                LOG(LOG_INFO, "Found Platform \"%s\"\n", retv);
+                free(retv);
+                *ret = 0;
+                return platforms[i];
+            }
+        }
+        free(retv);
+    }
+    *ret = 1;
+    return (cl_platform_id)-1;
+}
+
+static void context_error_callback(const char *errinfo, const void *private_info, size_t cb, void *user_data)
+{
+    LOG(LOG_ERROR, "ERROR: %s\n", errinfo);
 }

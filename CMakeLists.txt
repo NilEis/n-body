@@ -4,6 +4,7 @@ project(n-body VERSION 0.1.0 LANGUAGES C)
 option(USE_CUDA "Use cuda" OFF)
 option(USE_OPENCL "Use opencl" ON)
 
+find_package(OpenGL)
 
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
 add_compile_options(-ffunction-sections -fdata-sections -march=native)
@@ -19,7 +20,7 @@ set(GLAD_SOURCES_DIR "${PROJECT_SOURCE_DIR}/extern/glad/")
 add_subdirectory("${GLAD_SOURCES_DIR}/cmake" glad_cmake)
 glad_add_library(glad_gl_core_33 REPRODUCIBLE API gl:core=3.3)
 
-set(link_list glfw glad_gl_core_33 ma-log cglm)
+set(link_list glfw glad_gl_core_33 ma-log cglm ${OPENGL_LIBRARIES})
 
 set(source_files ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/octree.c
