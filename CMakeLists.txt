@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.9.0)
 project(n-body VERSION 0.1.0 LANGUAGES C)
 
 option(USE_CUDA "Use cuda" OFF)
-option(USE_OPENCL "Use opencl" ON)
+option(USE_OPENCL "Use opencl" OFF)
+option(USE_COMPUTE_SHADER "Use compute shader" ON)
 
 
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
@@ -28,7 +29,7 @@ ${CMAKE_CURRENT_SOURCE_DIR}/src/particle.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/camera.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/solver.c)
 
-if(USE_OPENCL AND NOT USE_CUDA)
+if(USE_OPENCL AND NOT USE_CUDA AND NOT USE_COMPUTE_SHADER)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/opencl_kernel.cl)
     file(READ ${CMAKE_SOURCE_DIR}/src/opencl_kernel.cl opencl_kernel_cl_file)
     string(REPLACE "\n" "\\n\"\\\n\"" opencl_kernel_cl "${opencl_kernel_cl_file}")
@@ -37,16 +38,24 @@ if(USE_OPENCL AND NOT USE_CUDA)
     find_package(OpenCL REQUIRED)
     list(APPEND source_files ${CMAKE_CURRENT_SOURCE_DIR}/src/opencl_tick.c)
     list(APPEND link_list OpenCL::OpenCL)
-else()
-
 endif()
-if(USE_CUDA AND NOT USE_OPENCL)
+if(USE_CUDA AND NOT USE_OPENCL AND NOT USE_COMPUTE_SHADER)
     enable_language(CUDA)
-    add_compile_definitions(USE_CUDA=1)
+    add_compile_definitions(USE_CUDA=1 USE_OPENCL=0 USE_COMPUTE_SHADER=0)
     list(APPEND source_files ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda_tick.cu)
-else()
+    endif()
     
+if(USE_COMPUTE_SHADER AND NOT USE_CUDA AND NOT USE_OPENCL)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/shader/compute_shader_solve.comp)
+    file(READ ${CMAKE_SOURCE_DIR}/shader/compute_shader_solve.comp compute_shader_solve_comp_file)
+    string(REPLACE "\n" "\\n\"\\\n\"" compute_shader_solve_comp "${compute_shader_solve_comp_file}")
+    
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/shader/compute_shader_update.comp)
+    file(READ ${CMAKE_SOURCE_DIR}/shader/compute_shader_update.comp compute_shader_update_comp_file)
+    string(REPLACE "\n" "\\n\"\\\n\"" compute_shader_update_comp "${compute_shader_update_comp_file}")
+    add_compile_definitions(USE_COMPUTE_SHADER=1 USE_CUDA=0 USE_OPENCL=0)
 endif()
+
 add_executable(n-body ${source_files})
 
 set_property(TARGET n-body PROPERTY C_STANDARD 11)

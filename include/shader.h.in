@@ -1,12 +1,26 @@
 #ifndef SHADER_H
 #define SHADER_H
 
+#include <stddef.h>
+
 #define SHADER_fs "@SHADER_fs@"
 const char const *basic_shader_fs = SHADER_fs;
+const size_t basic_shader_fs_size = sizeof(SHADER_fs) / sizeof(SHADER_fs[0]);
 #undef SHADER_fs
 
 #define SHADER_vs "@SHADER_vs@"
 const char const *basic_shader_vs = SHADER_vs;
+const size_t basic_shader_vs_size = sizeof(SHADER_vs) / sizeof(SHADER_vs[0]);
 #undef SHADER_vs
+
+#define SHADER_SOLVE_comp "@compute_shader_solve_comp@"
+const char const *shader_solve_comp = SHADER_SOLVE_comp;
+const size_t shader_solve_comp_size = sizeof(SHADER_SOLVE_comp) / sizeof(SHADER_SOLVE_comp[0]);
+#undef SHADER_SOLVE_comp
+
+#define SHADER_UPDATE_comp "@compute_shader_update_comp@"
+const char const *shader_update_comp = SHADER_UPDATE_comp;
+const size_t shader_update_comp_size = sizeof(SHADER_UPDATE_comp) / sizeof(SHADER_UPDATE_comp[0]);
+#undef SHADER_UPDATE_comp
 
 #endif // SHADER_H

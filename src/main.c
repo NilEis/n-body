@@ -77,6 +77,8 @@ static void print_particles(void);
 
 GLuint create_shader_prog(void);
 
+GLuint create_compute_shader_prog(const char *src);
+
 static inline void initialize_camera(void);
 
 static camera cam = {0};
@@ -111,13 +113,27 @@ int main(int argc, char *argv[])
     LOG(LOG_INFO, "Init GLAD\n");
     gladLoadGL(glfwGetProcAddress);
 
-    LOG(LOG_INFO, "Load Shader\n");
+    LOG(LOG_INFO, "Load shader\n");
     GLuint shader_prog = create_shader_prog();
 
     mat4 model_mat = {0};
     glm_mat4_identity(model_mat);
     mat4 view_mat = {0};
     mat4 proj_mat = {0};
+
+    LOG(LOG_INFO, "Generate buffer\n");
+    GLuint VBO, VAO;
+    // Gen vertex array
+    glGenVertexArrays(1, &VAO);
+    glBindVertexArray(VAO);
+    // Gen buffer
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    // Set buffer data
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_DOUBLE, GL_FALSE, sizeof(Particle), (void *)0);
+
+#if !USE_COMPUTE_SHADER
     LOG(LOG_INFO, "Dispatch tick thread\n");
     // print_particles();
 #if (defined(__unix__) || USE_PTHREAD)
@@ -127,15 +143,24 @@ int main(int argc, char *argv[])
     HANDLE thread;
     thread = CreateThread(NULL, 0, dispatch_threads, NULL, 0, NULL);
 #endif
-    GLuint VBO, VAO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
+#else
+    LOG(LOG_INFO, "Load solve compute shader\n");
+    GLuint shader_solve_prog = create_compute_shader_prog(shader_solve_comp);
+    LOG(LOG_INFO, "Load update compute shader\n");
+    GLuint shader_update_prog = create_compute_shader_prog(shader_update_comp);
+    GLuint shader_solve_prog_dt = glGetUniformLocation(shader_solve_prog, "dt");
+    GLuint shader_update_prog_dt = glGetUniformLocation(shader_update_prog, "dt");
+#endif
+
     LOG(LOG_INFO, "Start main loop\n");
     // Bind the vertex array object and vertex buffer object
     while (!tick_finished)
     {
         if (glfwWindowShouldClose(window))
         {
+#if USE_COMPUTE_SHADER
+            break;
+#endif
             static int stop_called = 1;
             if (stop_called)
             {
@@ -145,7 +170,6 @@ int main(int argc, char *argv[])
             }
         }
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glUseProgram(shader_prog);
 
         double currentFrame = glfwGetTime();
         delta_time.dt = currentFrame - delta_time.last_frame;
@@ -157,16 +181,32 @@ int main(int argc, char *argv[])
         glUniformMatrix4fv(glGetUniformLocation(shader_prog, "model"), 1, GL_FALSE, (const GLfloat *)model_mat);
         glUniformMatrix4fv(glGetUniformLocation(shader_prog, "view"), 1, GL_FALSE, (const GLfloat *)view_mat);
         glUniformMatrix4fv(glGetUniformLocation(shader_prog, "projection"), 1, GL_FALSE, (const GLfloat *)proj_mat);
-        // Copy the particle data to the buffer
-        glBindVertexArray(VAO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        // Set the vertex attribute pointers
-        glVertexAttribPointer(0, 3, GL_DOUBLE, GL_FALSE, sizeof(Particle), (void *)0);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
-        glEnableVertexAttribArray(0);
 
-        // Draw the particles as points
+#if USE_COMPUTE_SHADER
+
+        glUseProgram(shader_solve_prog);
+        //glBindVertexArray(VAO);
+        glUniform1d(shader_solve_prog_dt, dt);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, VBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, VBO);
+        glBindBufferBase(GL_ARRAY_BUFFER, 1, VBO);
+        glDispatchCompute(num_particles / 1024, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT|GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+
+        glUseProgram(shader_update_prog);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, VBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, VBO);
+        glBindBufferBase(GL_ARRAY_BUFFER, 1, VBO);
+        glUniform1d(shader_update_prog_dt, dt);
+        glDispatchCompute(num_particles / 1024, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT|GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+#else
         glBindVertexArray(VAO);
+#endif
+
+        //glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
+        glUseProgram(shader_prog);
+        glEnableVertexAttribArray(0);
         glPointSize(1.0f); // Set the size of the points
         glDrawArrays(GL_POINTS, 0, num_particles);
 
@@ -174,18 +214,60 @@ int main(int argc, char *argv[])
         glfwPollEvents();
     }
     LOG(LOG_INFO, "Stopped main loop\n");
+#if !USE_COMPUTE_SHADER
 #if (defined(__unix__) || USE_PTHREAD)
     pthread_join(thread, NULL);
 #else
     WaitForSingleObject(thread, INFINITE);
 #endif
     LOG(LOG_INFO, "Tick thread stopped\n");
+#endif
     glDeleteProgram(shader_prog);
     glfwDestroyWindow(window);
     glfwTerminate();
     free(particles);
     LOG(LOG_INFO, "Stopping\n");
     return 0;
+}
+
+GLuint create_compute_shader_prog(const char *src)
+{
+    GLuint computeShader, program;
+    GLint success;
+    GLchar infoLog[512];
+
+    // create shader object
+    computeShader = glCreateShader(GL_COMPUTE_SHADER);
+    glShaderSource(computeShader, 1, &src, NULL);
+    glCompileShader(computeShader);
+
+    // check for shader compile errors
+    glGetShaderiv(computeShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(computeShader, 512, NULL, infoLog);
+        LOG(LOG_ERROR, "Shader compilation failed: %s\n", infoLog);
+        return 0;
+    }
+
+    // create program object
+    program = glCreateProgram();
+    glAttachShader(program, computeShader);
+    glLinkProgram(program);
+
+    // check for program linking errors
+    glGetProgramiv(program, GL_LINK_STATUS, &success);
+    if (!success)
+    {
+        glGetProgramInfoLog(program, 512, NULL, infoLog);
+        LOG(LOG_ERROR, "Program linking failed: %s\n", infoLog);
+        return 0;
+    }
+
+    // clean up
+    glDeleteShader(computeShader);
+
+    return program;
 }
 
 GLFWwindow *initGLFW(void)
