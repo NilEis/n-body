@@ -12,11 +12,7 @@ layout(std430, binding = 0) buffer Particles {
     Particle particles[];
 };
 
-layout(std430, binding = 1) buffer Particles_out {
-Particle particles_out[];
-};
-
-layout (local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
+layout (local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 const double G = 0.06;//6.67408e-11;
 
@@ -47,5 +43,5 @@ void main() {
     p.vel += accel * dt;
     p.pos += p.vel * dt;
 
-    particles_out[tid] = p;
+    particles[tid] = p;
 }

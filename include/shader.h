@@ -44,11 +44,7 @@ const size_t basic_shader_vs_size = sizeof(SHADER_vs) / sizeof(SHADER_vs[0]);
 "    Particle particles[];\n"\
 "};\n"\
 "\n"\
-"layout(std430, binding = 1) buffer Particles_out {\n"\
-"Particle particles_out[];\n"\
-"};\n"\
-"\n"\
-"layout (local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;\n"\
+"layout (local_size_x = 64, local_size_y = 1, local_size_z = 1) in;\n"\
 "\n"\
 "const double G = 0.06;//6.67408e-11;\n"\
 "\n"\
@@ -79,7 +75,7 @@ const size_t basic_shader_vs_size = sizeof(SHADER_vs) / sizeof(SHADER_vs[0]);
 "    p.vel += accel * dt;\n"\
 "    p.pos += p.vel * dt;\n"\
 "\n"\
-"    particles_out[tid] = p;\n"\
+"    particles[tid] = p;\n"\
 "}"
 const char const *shader_solve_comp = SHADER_SOLVE_comp;
 const size_t shader_solve_comp_size = sizeof(SHADER_SOLVE_comp) / sizeof(SHADER_SOLVE_comp[0]);
@@ -99,11 +95,7 @@ const size_t shader_solve_comp_size = sizeof(SHADER_SOLVE_comp) / sizeof(SHADER_
 "Particle particles[];\n"\
 "};\n"\
 "\n"\
-"layout(std430, binding = 1) buffer Particles_out {\n"\
-"Particle particles_out[];\n"\
-"};\n"\
-"\n"\
-"layout(local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;\n"\
+"layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;\n"\
 "\n"\
 "const double G = 0.06;//6.67408e-11;\n"\
 "\n"\
@@ -112,7 +104,7 @@ const size_t shader_solve_comp_size = sizeof(SHADER_SOLVE_comp) / sizeof(SHADER_
 "if(tid >= particles.length()) return;\n"\
 "Particle p = particles[tid];\n"\
 "p.pos += p.vel * dt;\n"\
-"particles_out[tid].pos = dvec3(p.pos.xy, gl_GlobalInvocationID.x);\n"\
+"particles[tid].pos = dvec3(p.pos.xy, gl_GlobalInvocationID.x);\n"\
 "}"
 const char const *shader_update_comp = SHADER_UPDATE_comp;
 const size_t shader_update_comp_size = sizeof(SHADER_UPDATE_comp) / sizeof(SHADER_UPDATE_comp[0]);

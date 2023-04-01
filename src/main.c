@@ -150,6 +150,7 @@ int main(int argc, char *argv[])
     GLuint shader_update_prog = create_compute_shader_prog(shader_update_comp);
     GLuint shader_solve_prog_dt = glGetUniformLocation(shader_solve_prog, "dt");
     GLuint shader_update_prog_dt = glGetUniformLocation(shader_update_prog, "dt");
+    GLuint dispatch_size = num_particles % 1024 == 0 ? num_particles / 64 : (num_particles / 1024) + 1;
 #endif
 
     LOG(LOG_INFO, "Start main loop\n");
@@ -187,19 +188,17 @@ int main(int argc, char *argv[])
         glUseProgram(shader_solve_prog);
         //glBindVertexArray(VAO);
         glUniform1d(shader_solve_prog_dt, dt);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, VBO);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, VBO);
-        glBindBufferBase(GL_ARRAY_BUFFER, 1, VBO);
-        glDispatchCompute(num_particles / 1024, 1, 1);
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT|GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+        glDispatchCompute(dispatch_size, 1, 1);
+        glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
 
         glUseProgram(shader_update_prog);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, VBO);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, VBO);
-        glBindBufferBase(GL_ARRAY_BUFFER, 1, VBO);
         glUniform1d(shader_update_prog_dt, dt);
-        glDispatchCompute(num_particles / 1024, 1, 1);
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT|GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+        glDispatchCompute(dispatch_size, 1, 1);
+        glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBindVertexArray(VAO);
 #else
         glBindVertexArray(VAO);
 #endif
