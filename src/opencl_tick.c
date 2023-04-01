@@ -16,7 +16,10 @@ static cl_kernel kernel_update = NULL;
 
 cl_mem cl_particles = NULL;
 
-static size_t work_dim = 128;
+static size_t local_work_size_solver = 128;
+static size_t global_work_size_solver = 128;
+static size_t local_work_size_update = 128;
+static size_t global_work_size_update = 128;
 
 static void kernel_error(cl_int ret);
 static void arg_error(cl_int ret);
@@ -153,7 +156,7 @@ void init_opencl_tick(Particle *p, int n)
             break;
         }
     }
-    //cl_particles = clCreateBuffer(context, CL_MEM_COPY_HOST_PTR, n * sizeof(Particle), (void *)p, &ret);
+    // cl_particles = clCreateBuffer(context, CL_MEM_COPY_HOST_PTR, n * sizeof(Particle), (void *)p, &ret);
     cl_particles = clCreateBuffer(context, CL_MEM_READ_WRITE, n * sizeof(Particle), NULL, &ret);
     if (ret == CL_SUCCESS)
     {
@@ -320,7 +323,18 @@ void init_opencl_tick(Particle *p, int n)
         LOG(LOG_INFO, "clCreateKernel success\n");
     }
     kernel_error(ret);
-    clGetDeviceInfo(device_id, CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof(size_t), &work_dim, &ret);
+
+    size_t kernel_work_group_size = 0;
+
+    clGetKernelWorkGroupInfo(kernel_solve, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(size_t), &kernel_work_group_size, NULL);
+    local_work_size_solver = n < kernel_work_group_size ? n : kernel_work_group_size;
+    // global_work_size_solver = n % local_work_size_solver == 0 ? n / local_work_size_solver : (n / local_work_size_solver) + 1;
+    LOG(LOG_INFO, "Using %d blocks with %d threads = %d for solver\n", global_work_size_solver, local_work_size_solver, local_work_size_solver * global_work_size_solver);
+
+    clGetKernelWorkGroupInfo(kernel_update, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(size_t), &kernel_work_group_size, NULL);
+    local_work_size_update = n < kernel_work_group_size ? n : kernel_work_group_size;
+    // global_work_size_update = n % local_work_size_update == 0 ? n / local_work_size_update : (n / local_work_size_update) + 1;
+    LOG(LOG_INFO, "Using %d blocks with %d threads = %d for update\n", global_work_size_update, local_work_size_update, local_work_size_update * global_work_size_update);
 }
 
 static void arg_error(cl_int ret)
@@ -467,23 +481,23 @@ static void kernel_error(cl_int ret)
     }
 }
 
-void opencl_tick(Particle *p, volatile int *running, int n, double dt)
+void opencl_tick(Particle *p, volatile int *running, int n, double dt, int time_steps)
 {
-    size_t size_n = (size_t)n;
     cl_int ret;
     cl_int n_param = n;
     cl_double dt_param = dt;
+    size_t global_size = (size_t)n;
     arg_error(clSetKernelArg(kernel_solve, 0, sizeof(cl_mem), &cl_particles));
     arg_error(clSetKernelArg(kernel_solve, 1, sizeof(cl_double), &dt_param));
     arg_error(clSetKernelArg(kernel_solve, 2, sizeof(cl_int), &n_param));
     arg_error(clSetKernelArg(kernel_update, 0, sizeof(cl_mem), &cl_particles));
     arg_error(clSetKernelArg(kernel_update, 1, sizeof(cl_double), &dt_param));
     arg_error(clSetKernelArg(kernel_update, 2, sizeof(cl_int), &n_param));
-    for (int i = 0; i < TIME_STEPS && *running; i++)
+    for (int i = 0; i < time_steps && *running; i++)
     {
-        ret = clEnqueueNDRangeKernel(command_queue, kernel_solve, 1, 0, &size_n, &work_dim, 0, NULL, NULL);
+        ret = clEnqueueNDRangeKernel(command_queue, kernel_solve, 1, 0, &global_size, NULL, 0, NULL, NULL);
         enq_error(ret);
-        ret = clEnqueueNDRangeKernel(command_queue, kernel_update, 1, 0, &size_n, &work_dim, 0, NULL, NULL);
+        ret = clEnqueueNDRangeKernel(command_queue, kernel_update, 1, 0, &global_size, NULL, 0, NULL, NULL);
         enq_error(ret);
     }
     ret = clEnqueueReadBuffer(command_queue, cl_particles, CL_TRUE, 0, n * sizeof(Particle), p, 0, NULL, NULL);

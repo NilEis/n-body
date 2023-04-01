@@ -10,7 +10,7 @@ extern "C"
 #include "ma-log.h"
 
     void init_opencl_tick(Particle *p, int n);
-    void opencl_tick(Particle *p, volatile int *running, int n, double dt);
+    void opencl_tick(Particle *p, volatile int *running, int n, double dt, int time_steps);
     void free_opencl_tick(void);
 
 #ifdef __cplusplus

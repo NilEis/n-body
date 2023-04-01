@@ -21,8 +21,10 @@
 #include "solver.h"
 #endif
 
+volatile int paused = 0;
 volatile int running = 0;
 volatile int tick_finished = 0;
+volatile int time_steps = 1;
 
 #ifdef __STDC_NO_ATOMICS__
 // Atomic :(
@@ -117,7 +119,7 @@ int main(int argc, char *argv[])
     mat4 view_mat = {0};
     mat4 proj_mat = {0};
     LOG(LOG_INFO, "Dispatch tick thread\n");
-    //print_particles();
+    // print_particles();
 #if (defined(__unix__) || USE_PTHREAD)
     pthread_t thread;
     pthread_create(&thread, NULL, dispatch_threads, NULL);
@@ -244,6 +246,7 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
 void process_input(GLFWwindow *window)
 {
     cam.boost = 1;
+    static int p_last_press = 0;
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
     {
         glfwSetWindowShouldClose(window, 1);
@@ -254,6 +257,16 @@ void process_input(GLFWwindow *window)
         print_particles();
     }
 
+    p_last_press = p_last_press == 0 ? 0 : p_last_press - 1;
+
+    if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS)
+    {
+        if (p_last_press == 0)
+        {
+            paused = !paused;
+            p_last_press = 10;
+        }
+    }
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
     {
         cam.boost = 2;
@@ -273,6 +286,16 @@ void process_input(GLFWwindow *window)
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
     {
         move_camera(&cam, CAMERA_RIGHT, delta_time.dt);
+    }
+    if (glfwGetKey(window, GLFW_KEY_KP_ADD) == GLFW_PRESS)
+    {
+        time_steps++;
+        LOG(LOG_INFO, "%d\n", time_steps);
+    }
+    if (glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS)
+    {
+        time_steps = time_steps == 1 ? 1 : time_steps - 1;
+        LOG(LOG_INFO, "%d\n", time_steps);
     }
     if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
     {
@@ -442,12 +465,21 @@ DWORD WINAPI dispatch_threads(void *data)
     while (running == 1)
     {
 #if NUM_THREADS == 0 && !USE_CUDA && !USE_OPENCL
-        compute_forces_newtonian(particles, num_particles, 0, num_particles, dt);
-        update_particles(particles, num_particles, 0, num_particles, dt);
+        if (!paused)
+        {
+            compute_forces_newtonian(particles, num_particles, 0, num_particles, dt);
+            update_particles(particles, num_particles, 0, num_particles, dt);
+        }
 #elif USE_CUDA
-        cuda_tick(particles, (volatile int *)&running, num_particles, dt);
+        if (!paused)
+        {
+            cuda_tick(particles, (volatile int *)&running, num_particles, dt);
+        }
 #elif USE_OPENCL
-        opencl_tick(particles, (volatile int *)&running, num_particles, dt);
+        if (!paused)
+        {
+            opencl_tick(particles, (volatile int *)&running, num_particles, dt, time_steps);
+        }
 #else
         __asm("nop");
 #endif
