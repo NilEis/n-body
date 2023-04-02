@@ -40,42 +40,40 @@ const size_t basic_shader_vs_size = sizeof(SHADER_vs) / sizeof(SHADER_vs[0]);
 "\n"\
 "uniform double dt = 0.1;\n"\
 "\n"\
-"layout(std430, binding = 0) buffer Particles {\n"\
-"    Particle particles[];\n"\
+"layout(std430, binding = 0) buffer Particles_in {\n"\
+"    Particle particles_in[];\n"\
 "};\n"\
 "\n"\
-"layout (local_size_x = 64, local_size_y = 1, local_size_z = 1) in;\n"\
+"layout(std430, binding = 1) buffer Particles_out {\n"\
+"    Particle particles_out[];\n"\
+"};\n"\
+"\n"\
+"layout (local_size_x = 128, local_size_y = 1, local_size_z = 1) in;\n"\
 "\n"\
 "const double G = 0.06;//6.67408e-11;\n"\
 "\n"\
 "void main() {\n"\
-"    uint tid = gl_GlobalInvocationID.x;\n"\
-"\n"\
-"    if (tid >= particles.length() || tid == particles.length() - 1)\n"\
-"        return;\n"\
-"\n"\
-"    Particle p;\n"\
-"    dvec3 accel = dvec3(0.0, 0.0, 0.0);\n"\
-"\n"\
-"    for (int i = 0; i < particles.length(); i++) {\n"\
-"        if (i == tid)\n"\
-"            continue;\n"\
-"\n"\
-"        Particle other = particles[i];\n"\
-"\n"\
-"        dvec3 dist = other.pos - p.pos;\n"\
-"        double r2 = dot(dist, dist);\n"\
-"        double r = sqrt(r2);\n"\
-"\n"\
-"        double f = other.mass / (r2 * r);\n"\
-"\n"\
-"        accel += G * f * dist;\n"\
+"    uint index = gl_GlobalInvocationID.x;\n"\
+"    \n"\
+"    dvec3 acceleration = dvec3(0.0);\n"\
+"    \n"\
+"    // Calculate acceleration due to gravity for each particle\n"\
+"    for (uint i = 0; i < particles_in.length(); i++) {\n"\
+"        if (i == index) continue;\n"\
+"        \n"\
+"        dvec3 direction = particles_in[i].pos - particles_in[index].pos;\n"\
+"        double distance = length(direction);\n"\
+"        direction = normalize(direction);\n"\
+"        \n"\
+"        acceleration += (G * particles_in[i].mass / (distance * distance)) * direction;\n"\
 "    }\n"\
-"\n"\
-"    p.vel += accel * dt;\n"\
-"    p.pos += p.vel * dt;\n"\
-"\n"\
-"    particles[tid] = p;\n"\
+"    \n"\
+"    // Update position and velocity of particle using new acceleration\n"\
+"    Particle particle = particles_in[index];\n"\
+"    particle.vel += acceleration * dt;\n"\
+"    \n"\
+"    // Write updated particle to output buffer\n"\
+"    particles_out[index] = particle;\n"\
 "}"
 const char const *shader_solve_comp = SHADER_SOLVE_comp;
 const size_t shader_solve_comp_size = sizeof(SHADER_SOLVE_comp) / sizeof(SHADER_SOLVE_comp[0]);
@@ -91,20 +89,25 @@ const size_t shader_solve_comp_size = sizeof(SHADER_SOLVE_comp) / sizeof(SHADER_
 "\n"\
 "uniform double dt = 0.1;\n"\
 "\n"\
-"layout(std430, binding = 0) buffer Particles {\n"\
-"Particle particles[];\n"\
+"layout(std430, binding = 0) buffer Particles_in {\n"\
+"    Particle particles_in[];\n"\
 "};\n"\
 "\n"\
-"layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;\n"\
+"layout(std430, binding = 1) buffer Particles_out {\n"\
+"    Particle particles_out[];\n"\
+"};\n"\
+"\n"\
+"layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;\n"\
 "\n"\
 "const double G = 0.06;//6.67408e-11;\n"\
 "\n"\
 "void main() {\n"\
-"uint tid = gl_GlobalInvocationID.x;\n"\
-"if(tid >= particles.length()) return;\n"\
-"Particle p = particles[tid];\n"\
-"p.pos += p.vel * dt;\n"\
-"particles[tid].pos = dvec3(p.pos.xy, gl_GlobalInvocationID.x);\n"\
+"    uint tid = gl_GlobalInvocationID.x;\n"\
+"    if(tid >= particles_in.length()) return;\n"\
+"    Particle p = particles_in[tid];\n"\
+"    p.pos += p.vel * dt;\n"\
+"    particles_out[tid].vel = p.vel;\n"\
+"    particles_out[tid].pos = p.pos;\n"\
 "}"
 const char const *shader_update_comp = SHADER_UPDATE_comp;
 const size_t shader_update_comp_size = sizeof(SHADER_UPDATE_comp) / sizeof(SHADER_UPDATE_comp[0]);

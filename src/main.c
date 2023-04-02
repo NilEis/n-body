@@ -86,8 +86,8 @@ static camera cam = {0};
 static int num_particles = 1500;
 static double dt = 0.01;
 
-static int window_width = 600;
-static int window_height = 400;
+static int window_width = 1200;
+static int window_height = 800;
 
 static struct
 {
@@ -150,7 +150,13 @@ int main(int argc, char *argv[])
     GLuint shader_update_prog = create_compute_shader_prog(shader_update_comp);
     GLuint shader_solve_prog_dt = glGetUniformLocation(shader_solve_prog, "dt");
     GLuint shader_update_prog_dt = glGetUniformLocation(shader_update_prog, "dt");
-    GLuint dispatch_size = num_particles % 1024 == 0 ? num_particles / 64 : (num_particles / 1024) + 1;
+    GLuint dispatch_size = num_particles % 128 == 0 ? num_particles / 128 : (num_particles / 128) + 1;
+    GLuint SSBO;
+    glGenBuffers(1, &SSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+    LOG(LOG_INFO, "Dispatch_size: %d\n", dispatch_size);
 #endif
 
     LOG(LOG_INFO, "Start main loop\n");
@@ -184,27 +190,37 @@ int main(int argc, char *argv[])
         glUniformMatrix4fv(glGetUniformLocation(shader_prog, "projection"), 1, GL_FALSE, (const GLfloat *)proj_mat);
 
 #if USE_COMPUTE_SHADER
+        Particle part;
 
         glUseProgram(shader_solve_prog);
-        //glBindVertexArray(VAO);
+        // glBindVertexArray(VAO);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBO);
         glUniform1d(shader_solve_prog_dt, dt);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, VBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, SSBO);
         glDispatchCompute(dispatch_size, 1, 1);
-        glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
         glUseProgram(shader_update_prog);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, VBO);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, VBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, SSBO);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, VBO);
         glUniform1d(shader_update_prog_dt, dt);
         glDispatchCompute(dispatch_size, 1, 1);
-        glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBindVertexArray(VAO);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+        //glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(Particle), &part);
+        //LOG(LOG_INFO, "Update: %f, %f, %f - %f, %f, %f\n", part.pos.x, part.pos.y, part.pos.z, part.vel.x, part.vel.y, part.vel.z);
 #else
         glBindVertexArray(VAO);
 #endif
 
-        //glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
+        // glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
         glUseProgram(shader_prog);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        //glGetBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(Particle), &part);
+        //LOG(LOG_INFO, "Update VBO: %f, %f, %f - %f, %f, %f\n", part.pos.x, part.pos.y, part.pos.z, part.vel.x, part.vel.y, part.vel.z);
+        //glBindVertexArray(VAO);
         glEnableVertexAttribArray(0);
         glPointSize(1.0f); // Set the size of the points
         glDrawArrays(GL_POINTS, 0, num_particles);
@@ -281,7 +297,7 @@ GLFWwindow *initGLFW(void)
     glfwSetErrorCallback(error_callback);
     // Create window and context
     glfwWindowHint(GLFW_DOUBLEBUFFER, 1);
-    GLFWwindow *window = glfwCreateWindow(640, 480, "N-Body", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow(window_width, window_height, "N-Body", NULL, NULL);
     if (!window)
     {
         LOG(LOG_ERROR, "Could not create window or context\n");
@@ -588,7 +604,7 @@ DWORD WINAPI dispatch_threads(void *data)
 #endif
 }
 
-#if !USE_CUDA && !USE_OPENCL
+#if !USE_CUDA && !USE_OPENCL && !USE_COMPUTE_SHADER
 #if (defined(__unix__) || USE_PTHREAD) && NUM_THREADS != 0
 void *tick(void *data)
 #elif NUM_THREADS != 0
