@@ -213,9 +213,9 @@ int main(int argc, char *argv[])
         //LOG(LOG_INFO, "Update: %f, %f, %f - %f, %f, %f\n", part.pos.x, part.pos.y, part.pos.z, part.vel.x, part.vel.y, part.vel.z);
 #else
         glBindVertexArray(VAO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
 #endif
 
-        // glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
         glUseProgram(shader_prog);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         //glGetBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(Particle), &part);

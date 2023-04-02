@@ -19,7 +19,7 @@
 
 #ifndef USE_PTHREAD
 #if !USE_CUDE
-#define USE_PTHREAD 1
+#define USE_PTHREAD 0
 #else
 #define USE_PTHREAD 0
 #endif

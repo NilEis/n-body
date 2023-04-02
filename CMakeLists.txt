@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.9.0)
 project(n-body VERSION 0.1.0 LANGUAGES C)
 
-option(USE_CUDA "Use cuda" OFF)
+option(USE_CUDA "Use cuda" ON)
 option(USE_OPENCL "Use opencl" OFF)
-option(USE_COMPUTE_SHADER "Use compute shader" ON)
+option(USE_COMPUTE_SHADER "Use compute shader" OFF)
 
 
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
