@@ -23,7 +23,6 @@ glad_add_library(glad_gl_core_33 REPRODUCIBLE API gl:core=3.3)
 set(link_list glfw glad_gl_core_33 ma-log cglm)
 
 set(source_files ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
-${CMAKE_CURRENT_SOURCE_DIR}/src/octree.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/vec3.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/particle.c
 ${CMAKE_CURRENT_SOURCE_DIR}/src/camera.c
@@ -40,10 +39,15 @@ if(USE_OPENCL AND NOT USE_CUDA AND NOT USE_COMPUTE_SHADER)
     list(APPEND link_list OpenCL::OpenCL)
 endif()
 if(USE_CUDA AND NOT USE_OPENCL AND NOT USE_COMPUTE_SHADER)
+    option(USE_OCTREE "Use an octree implementation" ON)
     enable_language(CUDA)
     add_compile_definitions(USE_CUDA=1 USE_OPENCL=0 USE_COMPUTE_SHADER=0)
     list(APPEND source_files ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda_tick.cu)
+    if(USE_OCTREE)
+        list(APPEND source_files ${CMAKE_CURRENT_SOURCE_DIR}/src/octree.cu)
+        add_compile_definitions(USE_OCTREE=1)
     endif()
+endif()
     
 if(USE_COMPUTE_SHADER AND NOT USE_CUDA AND NOT USE_OPENCL)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/shader/compute_shader_solve.comp)
