@@ -28,3 +28,6 @@ Build with CMake
 cmake -S . -B build -D[USE_OPENCL, USE_CUDA, USE_COMPUTE_SHADER]=ON
 cmake --build build
 ```
+
+## Known issues
+- VBO not updating on AMD with compute shader
