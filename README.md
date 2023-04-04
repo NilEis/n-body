@@ -25,6 +25,6 @@ pip install jinja2
 ## Build
 Build with CMake
 ```bash
-cmake -S . -B build
+cmake -S . -B build -D[USE_OPENCL, USE_CUDA, USE_COMPUTE_SHADER]=ON
 cmake --build build
 ```
