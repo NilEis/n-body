@@ -5,6 +5,10 @@ git clone --recurse-submodules -j2 https://github.com/NilEis/n-body.git
 ```
 
 ## Dependencies
+```
+pip install jinja2
+```
+
 ### Multithreaded
 - On windows: PThread (optional)
 
