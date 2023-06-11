@@ -4,7 +4,7 @@ project(
   VERSION 0.1.0
   LANGUAGES C)
 
-option(USE_CUDA "Use cuda" ON)
+option(USE_CUDA "Use cuda" OFF)
 option(USE_OPENCL "Use opencl" OFF)
 option(USE_COMPUTE_SHADER "Use compute shader" OFF)
 
@@ -31,6 +31,8 @@ set(source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/src/camera.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/solver.c)
 
+set(different_source_files)
+
 if(USE_OPENCL
    AND NOT USE_CUDA
    AND NOT USE_COMPUTE_SHADER)
@@ -54,14 +56,16 @@ if(USE_CUDA
   check_ipo_supported(
     RESULT result
     OUTPUT output
-    LANGUAGES C CUDA)
+    LANGUAGES C)
   # set(CMAKE_CUDA_COMPILER clang++)
   option(USE_OCTREE "Use an octree implementation" FALSE)
   enable_language(CUDA)
   add_compile_definitions(USE_CUDA=1 USE_OPENCL=0 USE_COMPUTE_SHADER=0)
-  list(APPEND source_files ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda_tick.cu)
+  list(APPEND different_source_files
+       ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda_tick.cu)
   if(USE_OCTREE)
-    list(APPEND source_files ${CMAKE_CURRENT_SOURCE_DIR}/src/octree.cu)
+    list(APPEND different_source_files
+         ${CMAKE_CURRENT_SOURCE_DIR}/src/octree.cu)
     add_compile_definitions(USE_OCTREE=1)
   endif()
 else()
@@ -97,12 +101,19 @@ if(USE_COMPUTE_SHADER
   add_compile_definitions(USE_COMPUTE_SHADER=1 USE_CUDA=0 USE_OPENCL=0)
 endif()
 
-add_executable(n-body ${source_files})
+if(NOT USE_OPENCL
+   AND NOT USE_CUDA
+   AND NOT USE_COMPUTE_SHADER)
+  find_package(OpenMP)
+  if(OpenMP_C_FOUND)
+    message(INFO " Use OpenMP with ${OpenMP_C_FLAGS}")
+    add_compile_options(${OpenMP_C_FLAGS})
+    #add_definitions(-DUSE_OPENMP)
+    list(APPEND link_list OpenMP::OpenMP_C)
+  endif()
+endif()
 
-set_property(TARGET n-body PROPERTY C_STANDARD 11)
-set_target_properties(n-body PROPERTIES CUDA_ARCHITECTURES "native")
-
-target_include_directories(n-body PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/)
+add_executable(n-body ${source_files} ${different_source_files})
 
 set_property(
   DIRECTORY
@@ -120,10 +131,35 @@ string(REPLACE "\n" "\\n\"\\\n\"" SHADER_vs "${SHADER_vs_file}")
 configure_file(${CMAKE_SOURCE_DIR}/include/shader.h.in
                ${CMAKE_SOURCE_DIR}/include/shader.h @ONLY)
 
+set(multi "")
+
+file(GLOB_RECURSE header_files ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h)
+
+foreach(f IN LISTS header_files source_files)
+  message(INFO " ${f}")
+  file(READ ${f} f_read)
+  set(multi "${multi}\n\n${f_read}")
+endforeach()
+
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/mono.c "${multi}")
+
+add_executable(n-body_mono ${CMAKE_CURRENT_BINARY_DIR}/mono.c
+                           ${different_source_files})
+
+target_include_directories(n-body PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/)
+set_property(TARGET n-body PROPERTY C_STANDARD 11)
+set_target_properties(n-body PROPERTIES CUDA_ARCHITECTURES "native")
 target_link_libraries(n-body ${link_list})
+
+target_include_directories(n-body_mono
+                           PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/)
+set_property(TARGET n-body_mono PROPERTY C_STANDARD 11)
+set_target_properties(n-body_mono PROPERTIES CUDA_ARCHITECTURES "native")
+target_link_libraries(n-body_mono ${link_list})
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
   target_link_options(n-body PRIVATE -Wl,--gc-sections)
+  target_link_options(n-body_mono PRIVATE -Wl,--gc-sections)
 elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
   add_compile_definitions(USE_PTHREAD=0)
 endif()
@@ -131,6 +167,7 @@ endif()
 if(result)
   message(STATUS "IPO is supported")
   set_property(TARGET n-body PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+  set_property(TARGET n-body_mono PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 else()
   message(WARNING "IPO is not supported: ${output}")
 endif()
