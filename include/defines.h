@@ -18,7 +18,7 @@
 #endif
 
 #ifndef USE_PTHREAD
-#if !USE_CUDE
+#if !USE_CUDA
 #define USE_PTHREAD 1
 #else
 #define USE_PTHREAD 0
