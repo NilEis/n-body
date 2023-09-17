@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en-us">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+
+    <title>Kruskal's algorithm</title>
+
+    <meta name="title" content="Kruskal's algorithm for creating a mst">
+    <meta name="description" content="New raylib web demo, developed using the raylib library">
+    <meta name="keywords" content="raylib, games, html5, programming, C, C++">
+    <meta name="viewport" content="width=device-width">
+
+
+    <style>
+        body {
+            margin: 0px;
+        }
+
+        canvas.emscripten {
+            border: 0px none;
+            background-color: black;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas class=emscripten id=canvas tabindex=-1
+        onclick="document.getElementById('canvas').requestFullscreen()"></canvas>
+    <p id="output" />
+    <script>
+        if (typeof SharedArrayBuffer === 'undefined') {
+            const dummyMemory = new WebAssembly.Memory({ initial: 0, maximum: 0, shared: true })
+            globalThis.SharedArrayBuffer = dummyMemory.buffer.constructor
+        }
+        var Module = {
+            print: (function () {
+                var element = document.getElementById('output');
+                if (element) element.value = ''; // clear browser cache
+                return function (text) {
+                    if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+                    console.log(text);
+                    if (element) {
+                        element.value += text + "\n";
+                        element.scrollTop = element.scrollHeight; // focus on bottom
+                    }
+                };
+            })(),
+            canvas: (function () {
+                var canvas = document.getElementById('canvas');
+                return canvas;
+            })()
+        };
+    </script>
+    {{{ SCRIPT }}}
+</body>
+
+</html>

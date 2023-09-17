@@ -6,7 +6,7 @@
 #endif
 
 #ifndef NUM_THREADS
-#define NUM_THREADS 0
+#define NUM_THREADS 4
 #endif
 
 #ifndef USE_CUDA

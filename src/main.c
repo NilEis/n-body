@@ -5,7 +5,12 @@
 #include "defines.h"
 #define GLFW_INCLUDE_NONE
 #include "GLFW/glfw3.h"
+#ifdef __EMSCRIPTEN__
+#include <GL/gl.h>
+#include <GLES3/gl3.h>
+#else
 #include "glad/gl.h"
+#endif
 #include "ma-log.h"
 #include "cglm/cglm.h"
 #include "shader.h"
@@ -110,8 +115,10 @@ int main(int argc, char *argv[])
 
     GLFWwindow *window = initGLFW();
 
+#ifndef __EMSCRIPTEN__
     LOG(LOG_INFO, "Init GLAD\n");
     gladLoadGL(glfwGetProcAddress);
+#endif
 
     LOG(LOG_INFO, "Load shader\n");
     GLuint shader_prog = create_shader_prog();
@@ -150,7 +157,7 @@ int main(int argc, char *argv[])
     GLuint shader_update_prog = create_compute_shader_prog(shader_update_comp);
     GLuint shader_solve_prog_dt = glGetUniformLocation(shader_solve_prog, "dt");
     GLuint shader_update_prog_dt = glGetUniformLocation(shader_update_prog, "dt");
-    GLuint dispatch_size = num_particles % 128 == 0 ? num_particles / 128 : (num_particles / 128) + 1;
+    GLuint dispatch_size = num_particles;
     GLuint SSBO;
     glGenBuffers(1, &SSBO);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBO);
@@ -209,8 +216,8 @@ int main(int argc, char *argv[])
         glDispatchCompute(dispatch_size, 1, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-        //glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(Particle), &part);
-        //LOG(LOG_INFO, "Update: %f, %f, %f - %f, %f, %f\n", part.pos.x, part.pos.y, part.pos.z, part.vel.x, part.vel.y, part.vel.z);
+        // glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(Particle), &part);
+        // LOG(LOG_INFO, "Update: %f, %f, %f - %f, %f, %f\n", part.pos.x, part.pos.y, part.pos.z, part.vel.x, part.vel.y, part.vel.z);
 #else
         glBindVertexArray(VAO);
         glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
@@ -218,11 +225,13 @@ int main(int argc, char *argv[])
 
         glUseProgram(shader_prog);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        //glGetBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(Particle), &part);
-        //LOG(LOG_INFO, "Update VBO: %f, %f, %f - %f, %f, %f\n", part.pos.x, part.pos.y, part.pos.z, part.vel.x, part.vel.y, part.vel.z);
-        //glBindVertexArray(VAO);
+        // glGetBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(Particle), &part);
+        // LOG(LOG_INFO, "Update VBO: %f, %f, %f - %f, %f, %f\n", part.pos.x, part.pos.y, part.pos.z, part.vel.x, part.vel.y, part.vel.z);
+        // glBindVertexArray(VAO);
         glEnableVertexAttribArray(0);
+#ifndef __EMSCRIPTEN__
         glPointSize(1.0f); // Set the size of the points
+#endif
         glDrawArrays(GL_POINTS, 0, num_particles);
 
         glfwSwapBuffers(window);
