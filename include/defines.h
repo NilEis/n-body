@@ -2,7 +2,7 @@
 #define GLOBAL_DEFINES_H
 
 #ifndef P_RANGE
-#define P_RANGE 1000.0
+#define P_RANGE 300.0
 #endif
 
 #ifndef NUM_THREADS
@@ -26,7 +26,7 @@
 #endif
 
 #ifndef TIME_STEPS
-#define TIME_STEPS 1
+#define TIME_STEPS 10
 #endif
 
 #endif // GLOBAL_DEFINES_H

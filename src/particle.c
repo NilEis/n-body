@@ -22,7 +22,7 @@ void fill_particles_random(Particle *particles, int n, vec3_t min_pos, vec3_t ma
         {
             particles[i].vel = vec3_mul(100, vec3_normalize(vec3_cross(vec3_normalize(particles[i].pos), (vec3_t){0.0, 1.0, 0.0})));
         }
-        particles[i].mass = 1000 + rand() % 50;
+        particles[i].mass = 100 + rand() % 50;
         particles[i].mass = particles[i].mass == 0.0 ? 1.0 : particles[i].mass;
     }
     particles[n - 1].pos.x = 0;

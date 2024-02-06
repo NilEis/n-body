@@ -29,7 +29,7 @@
 volatile int paused = 0;
 volatile int running = 0;
 volatile int tick_finished = 0;
-volatile int time_steps = 1;
+volatile int time_steps = TIME_STEPS;
 
 #ifdef __STDC_NO_ATOMICS__
 // Atomic :(
@@ -47,6 +47,12 @@ void *dispatch_threads(void *);
 #else
 #include <windows.h>
 DWORD WINAPI dispatch_threads(void *data);
+#endif
+
+#if (defined(__unix__) || USE_PTHREAD)
+typedef pthread_t thread_handle_t;
+#elif !defined(__unix__)
+typedef HANDLE thread_handle_t;
 #endif
 
 #if NUM_THREADS != 0 && !USE_CUDA && !USE_OPENCL
@@ -86,9 +92,11 @@ GLuint create_compute_shader_prog(const char *src);
 
 static inline void initialize_camera(void);
 
+thread_handle_t dispatch_thread();
+
 static camera cam = {0};
 
-static int num_particles = 1500;
+static int num_particles = 15000;
 static double dt = 0.01;
 
 static int window_width = 1200;
@@ -143,13 +151,7 @@ int main(int argc, char *argv[])
 #if !USE_COMPUTE_SHADER
     LOG(LOG_INFO, "Dispatch tick thread\n");
     // print_particles();
-#if (defined(__unix__) || USE_PTHREAD)
-    pthread_t thread;
-    pthread_create(&thread, NULL, dispatch_threads, NULL);
-#elif !defined(__unix__)
-    HANDLE thread;
-    thread = CreateThread(NULL, 0, dispatch_threads, NULL, 0, NULL);
-#endif
+    thread_handle_t thread = dispatch_thread();
 #else
     LOG(LOG_INFO, "Load solve compute shader\n");
     GLuint shader_solve_prog = create_compute_shader_prog(shader_solve_comp);
@@ -252,6 +254,18 @@ int main(int argc, char *argv[])
     free(particles);
     LOG(LOG_INFO, "Stopping\n");
     return 0;
+}
+
+thread_handle_t dispatch_thread() {
+#if (defined(__unix__) || USE_PTHREAD)
+    thread_handle_t thread;
+    pthread_create(&thread, NULL, dispatch_threads, NULL);
+    return thread;
+#elif !defined(__unix__)
+    thread_handle_t thread;
+    thread = CreateThread(NULL, 0, dispatch_threads, NULL, 0, NULL);
+    return thread;
+#endif
 }
 
 GLuint create_compute_shader_prog(const char *src)
