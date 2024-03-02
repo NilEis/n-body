@@ -7,12 +7,12 @@ void fill_particles_random(Particle *particles, int n, vec3_t min_pos, vec3_t ma
     srand(time(NULL)); // Seed the random number generator with the current time
     for (int i = 0; i < n - 1; i++)
     {
-        particles[i].pos.x = min_pos.x + (max_pos.x - min_pos.x) * ((double)rand() / RAND_MAX);
-        particles[i].pos.y = (min_pos.y + (max_pos.y - min_pos.y) * ((double)rand() / RAND_MAX)) / 10.0;
-        particles[i].pos.z = min_pos.z + (max_pos.z - min_pos.z) * ((double)rand() / RAND_MAX);
-
-        particles[i].pos = vec3_mul((((double)rand() / RAND_MAX) * max_pos.x) + 5.0, vec3_normalize(particles[i].pos));
-        particles[i].pos.y /= 5.0;
+        particles[i].pos[0] = min_pos[0] + (max_pos[0] - min_pos[0]) * ((double)rand() / RAND_MAX);
+        particles[i].pos[1] = (min_pos[1] + (max_pos[1] - min_pos[1]) * ((double)rand() / RAND_MAX)) / 10.0;
+        particles[i].pos[2] = min_pos[2] + (max_pos[2] - min_pos[2]) * ((double)rand() / RAND_MAX);
+        particles[i].pos[3] = 0;
+        particles[i].pos = vec3_mul((((double)rand() / RAND_MAX) * max_pos[0]) + 5.0, vec3_normalize(particles[i].pos));
+        particles[i].pos[1] /= 5.0;
 
         if (vec3_length(particles[i].pos) <= 15)
         {
@@ -25,13 +25,15 @@ void fill_particles_random(Particle *particles, int n, vec3_t min_pos, vec3_t ma
         particles[i].mass = 100 + rand() % 50;
         particles[i].mass = particles[i].mass == 0.0 ? 1.0 : particles[i].mass;
     }
-    particles[n - 1].pos.x = 0;
-    particles[n - 1].pos.y = 0;
-    particles[n - 1].pos.z = 0;
+    particles[n - 1].pos[0] = 0;
+    particles[n - 1].pos[1] = 0;
+    particles[n - 1].pos[2] = 0;
+    particles[n - 1].pos[3] = 0;
 
-    particles[n - 1].vel.x = 0;
-    particles[n - 1].vel.y = 0;
-    particles[n - 1].vel.z = 0;
+    particles[n - 1].vel[0] = 0;
+    particles[n - 1].vel[1] = 0;
+    particles[n - 1].vel[2] = 0;
+    particles[n - 1].vel[3] = 0;
 
     particles[n - 1].mass = 50099999;
 }

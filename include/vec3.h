@@ -4,12 +4,7 @@
 
 typedef double vec3_m_t;
 
-typedef struct vec3_t
-{
-    vec3_m_t x;
-    vec3_m_t y;
-    vec3_m_t z;
-} vec3_t;
+typedef vec3_m_t vec3_t __attribute__((vector_size(4 * sizeof(vec3_m_t))));
 
 // Add two vectors using intrinsics
 vec3_t vec3_add(vec3_t a, vec3_t b);

@@ -15,27 +15,8 @@
 #include "cglm/cglm.h"
 #include "shader.h"
 
-#if USE_CUDA
-#include "cuda_tick.h"
-#elif USE_OPENCL
-#include "opencl_tick.h"
-#else
-#if defined(__unix__) && !USE_PTHREAD
-#error "PTHREAD is needed"
-#endif
 #include "solver.h"
-#endif
 
-
-#ifdef __STDC_NO_ATOMICS__
-// Atomic :(
-volatile int paused = 0;
-volatile int running = 0;
-volatile int tick_finished = 0;
-volatile int time_steps = TIME_STEPS;
-volatile int sem_comp = 0;
-volatile int sem_up = 0;
-#else
 #include <stdatomic.h>
 atomic_uint paused = 0;
 atomic_uint running = 0;
@@ -43,33 +24,13 @@ atomic_uint tick_finished = 0;
 atomic_uint time_steps = TIME_STEPS;
 atomic_uint sem_comp = 0;
 atomic_uint sem_up = 0;
-#endif
 
-#if (defined(__unix__) || USE_PTHREAD)
 #include <pthread.h>
 void *dispatch_threads(void *);
-#else
-#include <windows.h>
-DWORD WINAPI dispatch_threads(void *data);
-#endif
 
-#if (defined(__unix__) || USE_PTHREAD)
 typedef pthread_t thread_handle_t;
-#elif !defined(__unix__)
-typedef HANDLE thread_handle_t;
-#endif
 
-#if NUM_THREADS != 0 && !USE_CUDA && !USE_OPENCL
-#if (defined(__unix__) || USE_PTHREAD)
 void *tick(void *data);
-#elif !defined(__unix__)
-DWORD WINAPI tick(void *data);
-#else
-void tick(void);
-#endif
-#elif USE_CUDA
-
-#endif
 typedef struct
 {
     Particle *particles;
@@ -100,7 +61,7 @@ thread_handle_t dispatch_thread();
 
 static camera cam = {0};
 
-static int num_particles = 15000;
+static int num_particles = 2500;
 static double dt = 0.01;
 
 static int window_width = 1200;
@@ -152,25 +113,9 @@ int main(int argc, char *argv[])
     glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
     glVertexAttribPointer(0, 3, GL_DOUBLE, GL_FALSE, sizeof(Particle), (void *)0);
 
-#if !USE_COMPUTE_SHADER
     LOG(LOG_INFO, "Dispatch tick thread\n");
     // print_particles();
     thread_handle_t thread = dispatch_thread();
-#else
-    LOG(LOG_INFO, "Load solve compute shader\n");
-    GLuint shader_solve_prog = create_compute_shader_prog(shader_solve_comp);
-    LOG(LOG_INFO, "Load update compute shader\n");
-    GLuint shader_update_prog = create_compute_shader_prog(shader_update_comp);
-    GLuint shader_solve_prog_dt = glGetUniformLocation(shader_solve_prog, "dt");
-    GLuint shader_update_prog_dt = glGetUniformLocation(shader_update_prog, "dt");
-    GLuint dispatch_size = num_particles;
-    GLuint SSBO;
-    glGenBuffers(1, &SSBO);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBO);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-    LOG(LOG_INFO, "Dispatch_size: %d\n", dispatch_size);
-#endif
 
     LOG(LOG_INFO, "Start main loop\n");
     // Bind the vertex array object and vertex buffer object
@@ -178,9 +123,6 @@ int main(int argc, char *argv[])
     {
         if (glfwWindowShouldClose(window))
         {
-#if USE_COMPUTE_SHADER
-            break;
-#endif
             static int stop_called = 1;
             if (stop_called)
             {
@@ -202,32 +144,8 @@ int main(int argc, char *argv[])
         glUniformMatrix4fv(glGetUniformLocation(shader_prog, "view"), 1, GL_FALSE, (const GLfloat *)view_mat);
         glUniformMatrix4fv(glGetUniformLocation(shader_prog, "projection"), 1, GL_FALSE, (const GLfloat *)proj_mat);
 
-#if USE_COMPUTE_SHADER
-        Particle part;
-
-        glUseProgram(shader_solve_prog);
-        // glBindVertexArray(VAO);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBO);
-        glUniform1d(shader_solve_prog_dt, dt);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, VBO);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, SSBO);
-        glDispatchCompute(dispatch_size, 1, 1);
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-
-        glUseProgram(shader_update_prog);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, VBO);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, SSBO);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, VBO);
-        glUniform1d(shader_update_prog_dt, dt);
-        glDispatchCompute(dispatch_size, 1, 1);
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-
-        // glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(Particle), &part);
-        // LOG(LOG_INFO, "Update: %f, %f, %f - %f, %f, %f\n", part.pos.x, part.pos.y, part.pos.z, part.vel.x, part.vel.y, part.vel.z);
-#else
         glBindVertexArray(VAO);
         glBufferData(GL_ARRAY_BUFFER, sizeof(Particle) * num_particles, particles, GL_DYNAMIC_DRAW);
-#endif
 
         glUseProgram(shader_prog);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
@@ -244,14 +162,8 @@ int main(int argc, char *argv[])
         glfwPollEvents();
     }
     LOG(LOG_INFO, "Stopped main loop\n");
-#if !USE_COMPUTE_SHADER
-#if (defined(__unix__) || USE_PTHREAD)
     pthread_join(thread, NULL);
-#else
-    WaitForSingleObject(thread, INFINITE);
-#endif
     LOG(LOG_INFO, "Tick thread stopped\n");
-#endif
     glDeleteProgram(shader_prog);
     glfwDestroyWindow(window);
     glfwTerminate();
@@ -260,16 +172,11 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-thread_handle_t dispatch_thread() {
-#if (defined(__unix__) || USE_PTHREAD)
+thread_handle_t dispatch_thread()
+{
     thread_handle_t thread;
     pthread_create(&thread, NULL, dispatch_threads, NULL);
     return thread;
-#elif !defined(__unix__)
-    thread_handle_t thread;
-    thread = CreateThread(NULL, 0, dispatch_threads, NULL, 0, NULL);
-    return thread;
-#endif
 }
 
 GLuint create_compute_shader_prog(const char *src)
@@ -469,7 +376,7 @@ static void print_particles(void)
 {
     for (int i = 0; i < num_particles; i++)
     {
-        LOG(LOG_INFO, "Particle %d: mass: %f - x: %f, y: %f, z: %f - vx: %f, vy: %f, vz: %f\n", i, particles[i].mass, particles[i].pos.x, particles[i].pos.y, particles[i].pos.z, particles[i].vel.x, particles[i].vel.y, particles[i].vel.z);
+        LOG(LOG_INFO, "Particle %d: mass: %f - x: %f, y: %f, z: %f - vx: %f, vy: %f, vz: %f\n", i, particles[i].mass, particles[i].pos[0], particles[i].pos[1], particles[i].pos[2], particles[i].vel[0], particles[i].vel[1], particles[i].vel[2]);
     }
 }
 GLuint create_shader_prog(void)
@@ -547,18 +454,9 @@ static inline void initialize_camera(void)
     cam.Zoom = 45.0f;
 }
 
-#if (defined(__unix__) || USE_PTHREAD)
 void *dispatch_threads(void *data)
-#else
-DWORD WINAPI dispatch_threads(void *data)
-#endif
 {
-#if NUM_THREADS != 0 && !USE_CUDA && !USE_OPENCL
-#if (defined(__unix__) || USE_PTHREAD)
     pthread_t thread[NUM_THREADS];
-#elif !defined(__unix__)
-    HANDLE thread[NUM_THREADS];
-#endif
     {
         unsigned int n_size = num_particles / NUM_THREADS;
         for (int i = 0; i < NUM_THREADS; i++)
@@ -572,82 +470,30 @@ DWORD WINAPI dispatch_threads(void *data)
                 t_args->end = num_particles;
             }
             printf("%d <--> %d\n", t_args->start, t_args->end);
-#if defined(__unix__) || USE_PTHREAD
             pthread_create(&thread[i], NULL, tick, (void *)t_args);
-#elif !defined(__unix__)
-            thread[i] = CreateThread(NULL, 0, tick, (void *)t_args, 0, NULL);
-#endif
         }
     }
-#endif
-#if USE_CUDA
-    init_cuda_tick(particles, num_particles);
-#elif USE_OPENCL
-    init_opencl_tick(particles, num_particles);
-#endif
     running = 1;
     while (running == 1)
     {
-#if NUM_THREADS == 0 && !USE_CUDA && !USE_OPENCL
-        if (!paused)
-        {
-            compute_forces_newtonian(particles, num_particles, 0, num_particles, dt);
-            update_particles(particles, num_particles, 0, num_particles, dt);
-        }
-#elif USE_CUDA
-        if (!paused)
-        {
-            cuda_tick(particles, (volatile int *)&running, num_particles, dt);
-        }
-#elif USE_OPENCL
-        if (!paused)
-        {
-            opencl_tick(particles, (volatile int *)&running, num_particles, dt, time_steps);
-        }
-#else
         __asm("nop");
-#endif
     }
-#if USE_CUDA
-    free_cuda_tick();
-#elif USE_OPENCL
-    free_opencl_tick();
-#endif
-#if NUM_THREADS != 0 && !USE_CUDA && !USE_OPENCL
+
     for (int i = 0; i < NUM_THREADS; i++)
     {
-#if (defined(__unix__) || USE_PTHREAD)
         pthread_cancel(thread[i]);
-#elif !defined(__unix__)
-        CloseHandle(thread[i]);
-#endif
     }
-#endif
     tick_finished = 1;
-#if (defined(__unix__) || USE_PTHREAD)
     return NULL;
-#elif NUM_THREADS != 0
-    return 0;
-#endif
 }
 
-#if !USE_CUDA && !USE_OPENCL && !USE_COMPUTE_SHADER
-#if (defined(__unix__) || USE_PTHREAD) && NUM_THREADS != 0
 void *tick(void *data)
-#elif NUM_THREADS != 0
-DWORD WINAPI tick(void *data)
-#else
-void tick(void)
-#endif
 {
-#if NUM_THREADS != 0
     thread_arg args = {0};
     args.particles = ((thread_arg *)data)->particles;
     args.start = ((thread_arg *)data)->start;
     args.end = ((thread_arg *)data)->end;
     free(data);
-#endif
-#if NUM_THREADS != 0
     while (1)
     {
         while (sem_up != 0)
@@ -662,11 +508,5 @@ void tick(void)
         update_particles(args.particles, num_particles, args.start, args.end, dt);
         --sem_up;
     }
-#endif
-#if (defined(__unix__) || USE_PTHREAD)
     return NULL;
-#elif NUM_THREADS != 0
-    return 0;
-#endif
 }
-#endif
