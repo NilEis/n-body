@@ -108,7 +108,7 @@ if(NOT USE_OPENCL
   if(OpenMP_C_FOUND)
     message(INFO " Use OpenMP with ${OpenMP_C_FLAGS}")
     add_compile_options(${OpenMP_C_FLAGS})
-    # add_definitions(-DUSE_OPENMP)
+    add_definitions(-DUSE_OPENMP)
     list(APPEND link_list OpenMP::OpenMP_C)
   endif()
 endif()

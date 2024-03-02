@@ -26,17 +26,21 @@
 #include "solver.h"
 #endif
 
+
+#ifdef __STDC_NO_ATOMICS__
+// Atomic :(
 volatile int paused = 0;
 volatile int running = 0;
 volatile int tick_finished = 0;
 volatile int time_steps = TIME_STEPS;
-
-#ifdef __STDC_NO_ATOMICS__
-// Atomic :(
 volatile int sem_comp = 0;
 volatile int sem_up = 0;
 #else
 #include <stdatomic.h>
+atomic_uint paused = 0;
+atomic_uint running = 0;
+atomic_uint tick_finished = 0;
+atomic_uint time_steps = TIME_STEPS;
 atomic_uint sem_comp = 0;
 atomic_uint sem_up = 0;
 #endif
