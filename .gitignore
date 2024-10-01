@@ -7,3 +7,4 @@ MISRA*.txt
 .cache/
 .clangd
 *-build*/
+.idea/
