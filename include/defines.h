@@ -1,32 +1,11 @@
-#ifndef GLOBAL_DEFINES_H
-#define GLOBAL_DEFINES_H
+#ifndef DEFINES_H
+#define DEFINES_H
 
-#ifndef P_RANGE
-#define P_RANGE 300.0
-#endif
+#define WINDOW_WIDTH 1920
+#define WINDOW_HEIGHT 1080
+#define MAP_WIDTH 1920
+#define MAP_HEIGHT 1080
+#define NUM_UNIFORMS 2
+#define NUM_ANTS 7000000
 
-#ifndef NUM_THREADS
-#define NUM_THREADS 1
-#endif
-
-#ifndef USE_CUDA
-#define USE_CUDA 0
-#endif
-
-#ifndef USE_OPENCL
-#define USE_OPENCL 0
-#endif
-
-#ifndef USE_PTHREAD
-#if !USE_CUDA
-#define USE_PTHREAD 1
-#else
-#define USE_PTHREAD 0
-#endif
-#endif
-
-#ifndef TIME_STEPS
-#define TIME_STEPS 10
-#endif
-
-#endif // GLOBAL_DEFINES_H
+#endif // DEFINES_H

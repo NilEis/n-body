@@ -1,5 +1,9 @@
 build/
+build_web/
+build_wsl/
 .vscode/
-build.bat
-build_*/
-cmake-build-*/
+src/shader.c
+MISRA*.txt
+.cache/
+.clangd
+*-build*/
