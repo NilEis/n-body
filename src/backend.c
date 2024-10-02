@@ -14,6 +14,9 @@
 
 #define LOG(a, str, ...) printf (a str, ##__VA_ARGS__)
 
+static const int SIZE_ELEM = 6; // glsl vec3[3] = float1,float2,float3,float4,
+// float5,float6,float7,float8
+
 typedef struct
 {
     GLuint VBO;
@@ -45,6 +48,7 @@ typedef struct
         GLuint index;
         char *names[NUM_UNIFORMS];
     } uniforms_buffer_object;
+    GLfloat *ants;
 } state_t;
 
 static void error_callback (int error, const char *description);
@@ -120,8 +124,8 @@ GLFWwindow *init_glfw (void)
     // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     // glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     // glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-    GLFWwindow *window = glfwCreateWindow (
-        WINDOW_WIDTH, WINDOW_HEIGHT, "Raytracer", NULL, NULL);
+    GLFWwindow *window
+        = glfwCreateWindow (WINDOW_WIDTH, WINDOW_HEIGHT, "N-Body", NULL, NULL);
     glfwMakeContextCurrent (window);
     glfwSetFramebufferSizeCallback (window, framebuffer_size_callback);
     if (!window)
@@ -148,27 +152,28 @@ void draw (void)
         3, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
 
     glBindVertexArray (state.vertex_data.VAO);
+    state.time++;
+    memcpy (state.uniforms_buffer_object.mem
+                + state.uniforms_buffer_object.offset[1],
+        &(state.time),
+        sizeof (GLint));
+    glBufferSubData (GL_UNIFORM_BUFFER,
+        0,
+        state.uniforms_buffer_object.block_size,
+        state.uniforms_buffer_object.mem);
 
-    for (int i = 0; i < 2; i++)
-    {
-        state.time++;
-        memcpy (state.uniforms_buffer_object.mem
-                    + state.uniforms_buffer_object.offset[1],
-            &(state.time),
-            sizeof (GLint));
-        glBufferSubData (GL_UNIFORM_BUFFER,
-            0,
-            state.uniforms_buffer_object.block_size,
-            state.uniforms_buffer_object.mem);
+    glBufferSubData (GL_SHADER_STORAGE_BUFFER,
+        0,
+        SIZE_ELEM * NUM_ANTS * sizeof (GLfloat),
+        state.ants);
 
-        glUseProgram (state.comp_shader_map);
-        glDispatchCompute ((GLuint)NUM_ANTS, 1, 1);
-        glMemoryBarrier (GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    glUseProgram (state.comp_shader_map);
+    glDispatchCompute ((GLuint)NUM_ANTS, 1, 1);
+    glMemoryBarrier (GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
-        glUseProgram (state.comp_shader_sub);
-        glDispatchCompute ((GLuint)MAP_WIDTH, (GLuint)MAP_HEIGHT, 1);
-        glMemoryBarrier (GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-    }
+    glUseProgram (state.comp_shader_sub);
+    glDispatchCompute ((GLuint)MAP_WIDTH, (GLuint)MAP_HEIGHT, 1);
+    glMemoryBarrier (GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
     glUseProgram (state.shader);
     glDrawArrays (GL_TRIANGLES, 0, 3);
@@ -178,18 +183,30 @@ void draw (void)
     // sleep(1);
 }
 
+void update (void)
+{
+    for (int i = 0; i < NUM_ANTS; i++)
+    {
+        const int index = 6 * i;
+        state.ants[index] = state.ants[index + 2];
+        state.ants[index + 1] = state.ants[index + 3];
+    }
+}
+
 GLFWwindow *backend_get_window (void) { return state.window; }
 
-void backend_deinit (void) { cleanup_glfw (state); }
+void backend_deinit (void)
+{
+    cleanup_glfw (state);
+    free (state.ants);
+}
 
 GLuint create_ssbo ()
 {
-    const int SIZE_ELEM = 4; // glsl vec3[2] = float1,float2,float3,float4,
-                             // float5,float6,float7,float8
     GLuint SSBO;
     glCreateBuffers (1, &SSBO);
     LOG (LOG_INFO, "Generating ants\n");
-    GLfloat *ants = calloc (SIZE_ELEM * NUM_ANTS, sizeof (GLfloat));
+    state.ants = calloc (SIZE_ELEM * NUM_ANTS, sizeof (GLfloat));
     for (int i = 0; i < SIZE_ELEM * NUM_ANTS; i += SIZE_ELEM)
     {
         const GLfloat r = rand ();
@@ -197,16 +214,16 @@ GLuint create_ssbo ()
         d = d == 0 ? 1 : d;
         const GLfloat x = cos (r);
         const GLfloat y = sin (r);
-        ants[i + 0] = MAP_WIDTH / 2 + x * d;
-        ants[i + 1] = MAP_HEIGHT / 2 + y * d;
-        ants[i + 2]
-            = (GLfloat)atan2 (-(MAP_WIDTH / 2 - x), -(MAP_HEIGHT / 2 - y));
+        state.ants[i + 0] = MAP_WIDTH / 2 + x * d;
+        state.ants[i + 1] = MAP_HEIGHT / 2 + y * d;
+        state.ants[i + 2] = 0.1f;
+        state.ants[i + 3] = 0.1f;
+        state.ants[i + 4] = 10;
     }
     glNamedBufferStorage (SSBO,
         SIZE_ELEM * sizeof (GLfloat) * NUM_ANTS,
-        ants,
+        state.ants,
         GL_DYNAMIC_STORAGE_BIT);
-    free (ants);
     glBindBuffer (GL_SHADER_STORAGE_BUFFER, 0);
     return SSBO;
 }

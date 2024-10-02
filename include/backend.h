@@ -10,6 +10,8 @@ GLFWwindow *backend_get_window(void);
 
 void draw(void);
 
+void update(void);
+
 void backend_deinit(void);
 
 #endif // BACKEND_H
