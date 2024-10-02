@@ -8,3 +8,4 @@ MISRA*.txt
 .clangd
 *-build*/
 .idea/
+build_*/
