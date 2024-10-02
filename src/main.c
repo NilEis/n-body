@@ -16,7 +16,10 @@ int main ()
     while (!glfwWindowShouldClose (window))
     {
         draw ();
-        update();
+        for(int i = 0; i < 1; i++)
+        {
+            update ();
+        }
         glfwPollEvents ();
     }
 

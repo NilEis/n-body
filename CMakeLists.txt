@@ -48,7 +48,7 @@ target_precompile_headers(n-body PRIVATE ${HEADER_FILES})
 
 target_include_directories(n-body PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/ ${CMAKE_CURRENT_BINARY_DIR}/generated/include/)
 
-target_link_libraries(n-body m glfw glad_gl_core_46)
+target_link_libraries(n-body glfw glad_gl_core_46)
 
 include(CheckIPOSupported)
 

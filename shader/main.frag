@@ -10,11 +10,12 @@ layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform uniforms_buffer {
     vec2 size;
+    vec4 map_size;
     int time;
 };
 
 layout(std430, binding = 1) buffer ant_buffer {
-    vec3 ants[];
+    vec2 ants[];
 };
 
 layout(binding = 2,R32F) uniform image2D map;

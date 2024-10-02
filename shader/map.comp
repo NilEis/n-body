@@ -7,15 +7,22 @@
 
 layout(binding = 0) uniform uniforms_buffer {
     vec2 size;
+    vec4 map_size;
+    int time;
 };
 
 layout(std430, binding = 1) buffer ant_buffer {
-    vec3 ants[];
+    vec2 ants[];
 };
 
-layout(binding = 2, R32F) uniform image2D map;
+layout(binding = 3, R32F) uniform image2D map;
 
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+float map_value(float value, vec2 from, vec2 to)
+{
+    return from.y + (value - from.x) * (to.y - to.x) / (from.y - from.x);
+}
 
 void main() {
     uint index = gl_GlobalInvocationID.x;

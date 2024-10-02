@@ -2,20 +2,20 @@
 #include "defines.h"
 #include "glad/gl.h"
 #include "shader.h"
+
 #include <math.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #define LOG_ERROR "ERROR: "
 #define LOG_INFO "INFO:  "
 
 #define LOG(a, str, ...) printf (a str, ##__VA_ARGS__)
 
-static const int SIZE_ELEM = 6; // glsl vec3[3] = float1,float2,float3,float4,
-// float5,float6,float7,float8
+#define SIZE_ELEM 2
 
 typedef struct
 {
@@ -28,15 +28,26 @@ typedef struct
     GLFWwindow *window;
     char window_name[28];
     GLuint shader;
+    GLuint comp_shader_blur;
     GLuint comp_shader_map;
     GLuint comp_shader_sub;
+    struct
+    {
+        GLuint shader;
+        char *name;
+        GLuint x;
+        GLuint y;
+        GLuint z;
+    } compute_shader_pipeline[NUM_COMP_SHADERS];
     GLuint map_a;
     GLuint map_b;
+    bool current_map_is_a;
     GLuint ssbo;
     GLint time;
     int render_passes_n;
     vertex_data_t vertex_data;
     GLfloat size[2];
+    GLfloat map_size[4];
     struct
     {
         GLubyte *uniforms;
@@ -48,7 +59,17 @@ typedef struct
         GLuint index;
         char *names[NUM_UNIFORMS];
     } uniforms_buffer_object;
-    GLfloat *ants;
+    GLfloat ants_pos[SIZE_ELEM * NUM_ANTS];
+    struct
+    {
+        GLfloat *x;
+        GLfloat *y;
+        double vx;
+        double vy;
+        double fx;
+        double fy;
+        double w;
+    } ants[NUM_ANTS];
 } state_t;
 
 static void error_callback (int error, const char *description);
@@ -64,7 +85,9 @@ vertex_data_t init_vertex_data (void);
 
 static GLFWwindow *init_glfw (void);
 
-static void cleanup_glfw (state_t s);
+bool swap_textures (bool current_map_is_a);
+
+static void cleanup_glfw (state_t *s);
 
 void print_uniforms (GLuint program);
 
@@ -95,16 +118,66 @@ int backend_init (void)
         = create_shader_prog_string (shader_main_frag, shader_main_vert);
     state.comp_shader_sub
         = create_compute_shader_prog_string (shader_sub_comp);
+    state.comp_shader_blur
+        = create_compute_shader_prog_string (shader_blur_comp);
     state.comp_shader_map
         = create_compute_shader_prog_string (shader_map_comp);
     state.vertex_data = init_vertex_data ();
     state.size[0] = (GLfloat)WINDOW_WIDTH;
     state.size[1] = (GLfloat)WINDOW_HEIGHT;
+    state.map_size[0] = (GLfloat)0;
+    state.map_size[1] = (GLfloat)0;
+    state.map_size[2] = (GLfloat)MAP_WIDTH;
+    state.map_size[3] = (GLfloat)MAP_HEIGHT;
     print_uniforms (state.shader);
     state.uniforms_buffer_object.ubo = create_uniform_buffer ();
     state.map_a = create_texture ();
     state.map_b = create_texture ();
     state.ssbo = create_ssbo ();
+    {
+        state.compute_shader_pipeline[0].shader = state.comp_shader_map;
+        state.compute_shader_pipeline[0].name = "map";
+        state.compute_shader_pipeline[0].x = (GLuint)NUM_ANTS;
+        state.compute_shader_pipeline[0].y = 1;
+        state.compute_shader_pipeline[0].z = 1;
+    }
+    {
+        state.compute_shader_pipeline[1].shader = state.comp_shader_sub;
+        state.compute_shader_pipeline[1].name = "sub";
+        state.compute_shader_pipeline[1].x = (GLuint)MAP_WIDTH;
+        state.compute_shader_pipeline[1].y = (GLuint)MAP_HEIGHT;
+        state.compute_shader_pipeline[1].z = 1;
+    }
+    {
+        state.compute_shader_pipeline[2].shader = state.comp_shader_blur;
+        state.compute_shader_pipeline[2].name = "blur";
+        state.compute_shader_pipeline[2].x = (GLuint)MAP_WIDTH;
+        state.compute_shader_pipeline[2].y = (GLuint)MAP_HEIGHT;
+        state.compute_shader_pipeline[2].z = 1;
+    }
+    LOG (LOG_INFO, "Compute shader pipeline:\n");
+    for (int i = 0; i < NUM_COMP_SHADERS; i++)
+    {
+        LOG (LOG_INFO, " - %s\n", state.compute_shader_pipeline[i].name);
+    }
+    glBindImageTexture (
+        2, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+    glBindImageTexture (
+        3, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+    state.current_map_is_a = true;
+    for (int i = 0; i < NUM_ANTS; i++)
+    {
+        state.ants[i].x = &state.ants_pos[i * 2];
+        state.ants[i].y = &state.ants_pos[i * 2 + 1];
+        state.ants[i].vx = 0.0;
+        state.ants[i].vy = 0.0;
+        state.ants[i].fx = 0;
+        state.ants[i].fy = 0;
+        state.ants[i].w = 1000000;
+    }
+    state.ants[0].w = 10000000000;
+    state.ants[0].vx = 0;
+    state.ants[0].vy = 0;
     state.time = 0;
     LOG (LOG_INFO, "finished init\n");
 }
@@ -146,15 +219,11 @@ void draw (void)
         state.uniforms_buffer_object.index,
         state.uniforms_buffer_object.ubo);
     glBindBufferBase (GL_SHADER_STORAGE_BUFFER, 1, state.ssbo);
-    glBindImageTexture (
-        2, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
-    glBindImageTexture (
-        3, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
 
     glBindVertexArray (state.vertex_data.VAO);
     state.time++;
     memcpy (state.uniforms_buffer_object.mem
-                + state.uniforms_buffer_object.offset[1],
+                + state.uniforms_buffer_object.offset[2],
         &(state.time),
         sizeof (GLint));
     glBufferSubData (GL_UNIFORM_BUFFER,
@@ -165,18 +234,20 @@ void draw (void)
     glBufferSubData (GL_SHADER_STORAGE_BUFFER,
         0,
         SIZE_ELEM * NUM_ANTS * sizeof (GLfloat),
-        state.ants);
-
-    glUseProgram (state.comp_shader_map);
-    glDispatchCompute ((GLuint)NUM_ANTS, 1, 1);
-    glMemoryBarrier (GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-    glUseProgram (state.comp_shader_sub);
-    glDispatchCompute ((GLuint)MAP_WIDTH, (GLuint)MAP_HEIGHT, 1);
-    glMemoryBarrier (GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        state.ants_pos);
+    for (int i = 0; i < NUM_COMP_SHADERS; i++)
+    {
+        glUseProgram (state.compute_shader_pipeline[i].shader);
+        glDispatchCompute (state.compute_shader_pipeline[i].x,
+            state.compute_shader_pipeline[i].y,
+            state.compute_shader_pipeline[i].z);
+        glMemoryBarrier (GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        state.current_map_is_a = swap_textures (state.current_map_is_a);
+    }
 
     glUseProgram (state.shader);
     glDrawArrays (GL_TRIANGLES, 0, 3);
+    state.current_map_is_a = swap_textures (state.current_map_is_a);
     // Swap buffers and poll for events
     glfwSwapBuffers (state.window);
     glfwSetWindowTitle (state.window, state.window_name);
@@ -187,18 +258,47 @@ void update (void)
 {
     for (int i = 0; i < NUM_ANTS; i++)
     {
-        const int index = 6 * i;
-        state.ants[index] = state.ants[index + 2];
-        state.ants[index + 1] = state.ants[index + 3];
+        for (int j = 0; j < NUM_ANTS; j++)
+        {
+            if (j != i)
+            {
+                double dx = *state.ants[i].x - *state.ants[j].x;
+                double dy = *state.ants[i].y - *state.ants[j].y;
+                double dist = sqrt (dx * dx + dy * dy);
+                double F = (6.673e-11 * state.ants[i].w * state.ants[j].w)
+                         / (dist * dist + 3E9);
+                state.ants[i].fx += F * dx / dist;
+                state.ants[i].fy += F * dy / dist;
+            }
+        }
+        state.ants[i].vx += state.ants[i].fx / state.ants[i].w;
+        state.ants[i].vy += state.ants[i].fy / state.ants[i].w;
+        *state.ants[i].x += state.ants[i].vx;
+        *state.ants[i].y += state.ants[i].vy;
     }
 }
 
 GLFWwindow *backend_get_window (void) { return state.window; }
 
-void backend_deinit (void)
+void backend_deinit (void) { cleanup_glfw (&state); }
+
+bool swap_textures (bool current_map_is_a)
 {
-    cleanup_glfw (state);
-    free (state.ants);
+    if (current_map_is_a)
+    {
+        glBindImageTexture (
+            2, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+        glBindImageTexture (
+            3, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+    }
+    else
+    {
+        glBindImageTexture (
+            2, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+        glBindImageTexture (
+            3, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+    }
+    return !current_map_is_a;
 }
 
 GLuint create_ssbo ()
@@ -206,7 +306,7 @@ GLuint create_ssbo ()
     GLuint SSBO;
     glCreateBuffers (1, &SSBO);
     LOG (LOG_INFO, "Generating ants\n");
-    state.ants = calloc (SIZE_ELEM * NUM_ANTS, sizeof (GLfloat));
+    memset (state.ants_pos, 0, sizeof (state.ants_pos));
     for (int i = 0; i < SIZE_ELEM * NUM_ANTS; i += SIZE_ELEM)
     {
         const GLfloat r = rand ();
@@ -214,15 +314,12 @@ GLuint create_ssbo ()
         d = d == 0 ? 1 : d;
         const GLfloat x = cos (r);
         const GLfloat y = sin (r);
-        state.ants[i + 0] = MAP_WIDTH / 2 + x * d;
-        state.ants[i + 1] = MAP_HEIGHT / 2 + y * d;
-        state.ants[i + 2] = 0.1f;
-        state.ants[i + 3] = 0.1f;
-        state.ants[i + 4] = 10;
+        state.ants_pos[i + 0] = MAP_WIDTH / 2 + x * d;
+        state.ants_pos[i + 1] = MAP_HEIGHT / 2 + y * d;
     }
     glNamedBufferStorage (SSBO,
         SIZE_ELEM * sizeof (GLfloat) * NUM_ANTS,
-        state.ants,
+        state.ants_pos,
         GL_DYNAMIC_STORAGE_BIT);
     glBindBuffer (GL_SHADER_STORAGE_BUFFER, 0);
     return SSBO;
@@ -419,25 +516,25 @@ vertex_data_t init_vertex_data (void)
     return (vertex_data_t){ .VBO = VBO, .VAO = VAO };
 }
 
-void cleanup_glfw (state_t s)
+void cleanup_glfw (state_t *s)
 {
     for (int i = 0; i < NUM_UNIFORMS; i++)
     {
-        free (state.uniforms_buffer_object.names[i]);
+        free (s->uniforms_buffer_object.names[i]);
     }
     LOG (LOG_INFO, "Destroying buffers\n");
-    glDeleteVertexArrays (1, &(state.vertex_data.VAO));
-    glDeleteBuffers (1, &(state.vertex_data.VBO));
-    glDeleteBuffers (1, &(state.uniforms_buffer_object.ubo));
-    glDeleteBuffers (1, &(state.ssbo));
+    glDeleteVertexArrays (1, &(s->vertex_data.VAO));
+    glDeleteBuffers (1, &(s->vertex_data.VBO));
+    glDeleteBuffers (1, &(s->uniforms_buffer_object.ubo));
+    glDeleteBuffers (1, &(s->ssbo));
     LOG (LOG_INFO, "Destroying textures\n");
-    glDeleteTextures (1, &(state.map_a));
-    glDeleteTextures (1, &(state.map_b));
-    free (state.uniforms_buffer_object.mem);
+    glDeleteTextures (1, &(s->map_a));
+    glDeleteTextures (1, &(s->map_b));
+    free (s->uniforms_buffer_object.mem);
     LOG (LOG_INFO, "Destroying shader\n");
-    glDeleteProgram (state.shader);
+    glDeleteProgram (s->shader);
     LOG (LOG_INFO, "Destroying window\n");
-    glfwDestroyWindow (state.window);
+    glfwDestroyWindow (s->window);
     LOG (LOG_INFO, "Terminating glfw\n");
     glfwTerminate ();
 }
