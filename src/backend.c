@@ -4,7 +4,6 @@
 #include "shader.h"
 
 #include <math.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -96,17 +95,17 @@ static GLFWwindow *init_glfw (void);
 
 bool swap_textures (bool current_map_is_a);
 
-static void cleanup_glfw (state_t *s);
+static void cleanup_glfw (const state_t *s);
 
 void print_uniforms (GLuint program);
 
 void framebuffer_size_callback (GLFWwindow *window, int width, int height);
 
-static state_t state = { 0 };
+static state_t state;
 
 GLuint create_texture_2d ();
 GLuint create_framebuffer (GLuint texture);
-GLuint create_ssbo (void *p, size_t size, int flags);
+GLuint create_ssbo (const void *p, GLsizeiptr size, int flags);
 
 int backend_init (void)
 {
@@ -117,7 +116,7 @@ int backend_init (void)
     state.window_name[3] = 's';
     state.window_name[4] = '\0';
     state.selected_ant = 0;
-    if (state.window == NULL)
+    if (state.window == nullptr)
     {
         return -1;
     }
@@ -145,12 +144,13 @@ int backend_init (void)
             4.0f,
             0.0f, // v3
         };
-        state.vertex_data = init_vertex_data (&vertices, sizeof (vertices), 3);
+        state.vertex_data = init_vertex_data (
+            (const float (*)[]) & vertices, sizeof (vertices), 3);
     }
     {
         static constexpr float vertices[] = { 0.0f, 0.0f, 1.0f };
-        state.point_vx_data
-            = init_vertex_data (&vertices, sizeof (vertices), 1);
+        state.point_vx_data = init_vertex_data (
+            (const float (*)[]) & vertices, sizeof (vertices), 1);
     }
     state.size[0] = (GLfloat)WINDOW_WIDTH;
     state.size[1] = (GLfloat)WINDOW_HEIGHT;
@@ -167,11 +167,11 @@ int backend_init (void)
         memset (state.ants_pos, 0, sizeof (state.ants_pos));
         for (int i = 0; i < SIZE_ELEM * NUM_ANTS; i += SIZE_ELEM)
         {
-            const GLfloat r = rand ();
-            GLfloat d = rand () % (int)(MAP_HEIGHT / 4);
+            const GLfloat r = (GLfloat)rand ();
+            GLfloat d = (GLfloat)(rand () % (MAP_HEIGHT / 4));
             d = d == 0 ? 1 : d;
-            const GLfloat x = cos (r);
-            const GLfloat y = sin (r);
+            const GLfloat x = cosf (r);
+            const GLfloat y = sinf (r);
             state.ants_pos[i + 0] = x * d;
             state.ants_pos[i + 1] = y * d;
         }
@@ -225,17 +225,17 @@ int backend_init (void)
     state.ants[0].vx = 0;
     state.ants[0].vy = 0;
     {
-        GLfloat max_wheight = 0.0;
+        GLfloat max_wheight = 0.0f;
         for (int i = 0; i < NUM_ANTS; i++)
         {
             if (max_wheight < state.ants[i].w)
             {
-                max_wheight = state.ants[i].w;
+                max_wheight = (GLfloat)state.ants[i].w;
             }
         }
         memcpy (state.uniforms_buffer_object.mem
                     + state.uniforms_buffer_object.offset[2],
-            &(max_wheight),
+            &max_wheight,
             sizeof (GLfloat));
         glBufferSubData (GL_UNIFORM_BUFFER,
             0,
@@ -244,6 +244,7 @@ int backend_init (void)
     }
     state.time = 0;
     LOG (LOG_INFO, "finished init\n");
+    return 0;
 }
 
 GLFWwindow *init_glfw (void)
@@ -252,7 +253,7 @@ GLFWwindow *init_glfw (void)
     if (!glfwInit ())
     {
         LOG (LOG_ERROR, "Could not initialize glfw\n");
-        return NULL;
+        return nullptr;
     }
     glfwSetErrorCallback (error_callback);
     // Create window
@@ -261,14 +262,14 @@ GLFWwindow *init_glfw (void)
     // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     // glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     // glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-    GLFWwindow *window
-        = glfwCreateWindow (WINDOW_WIDTH, WINDOW_HEIGHT, "N-Body", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow (
+        WINDOW_WIDTH, WINDOW_HEIGHT, "N-Body", nullptr, nullptr);
     glfwMakeContextCurrent (window);
     glfwSetFramebufferSizeCallback (window, framebuffer_size_callback);
     if (!window)
     {
         LOG (LOG_ERROR, "Could not create window or context\n");
-        return NULL;
+        return nullptr;
     }
     return window;
 }
@@ -286,11 +287,11 @@ void draw (void)
     state.time++;
     memcpy (state.uniforms_buffer_object.mem
                 + state.uniforms_buffer_object.offset[3],
-        &(state.time),
+        &state.time,
         sizeof (GLint));
     memcpy (state.uniforms_buffer_object.mem
                 + state.uniforms_buffer_object.offset[4],
-        &(state.selected_ant),
+        &state.selected_ant,
         sizeof (GLint));
     glBufferSubData (GL_UNIFORM_BUFFER,
         0,
@@ -353,7 +354,7 @@ void update (void)
                 dist = EPSILON;
             }
             const double F
-                = (GRAVITATIONAL_CONSTANT * i_w * j_w) / (dist * dist);
+                = GRAVITATIONAL_CONSTANT * i_w * j_w / (dist * dist);
             const double force_x = F * dx / dist;
             state.ants[i].fx += force_x;
             const double force_y = F * dy / dist;
@@ -367,8 +368,8 @@ void update (void)
         const double i_w = state.ants[i].w;
         state.ants[i].vx += state.ants[i].fx / i_w;
         state.ants[i].vy += state.ants[i].fy / i_w;
-        *state.ants[i].x += state.ants[i].vx;
-        *state.ants[i].y += state.ants[i].vy;
+        *state.ants[i].x += (GLfloat)state.ants[i].vx;
+        *state.ants[i].y += (GLfloat)state.ants[i].vy;
     }
 }
 
@@ -376,7 +377,7 @@ GLFWwindow *backend_get_window (void) { return state.window; }
 
 void backend_deinit (void) { cleanup_glfw (&state); }
 
-bool swap_textures (bool current_map_is_a)
+bool swap_textures (const bool current_map_is_a)
 {
     if (current_map_is_a)
     {
@@ -397,7 +398,7 @@ bool swap_textures (bool current_map_is_a)
     return !current_map_is_a;
 }
 
-GLuint create_ssbo (void *p, size_t size, int flags)
+GLuint create_ssbo (const void *p, const GLsizeiptr size, const int flags)
 {
     GLuint SSBO;
     glCreateBuffers (1, &SSBO);
@@ -427,7 +428,7 @@ GLuint create_texture_2d ()
     return texture;
 }
 
-GLuint create_framebuffer (GLuint texture)
+GLuint create_framebuffer (const GLuint texture)
 {
     GLuint FramebufferName = 0;
     glGenFramebuffers (1, &FramebufferName);
@@ -440,23 +441,23 @@ GLuint create_framebuffer (GLuint texture)
     glFramebufferTexture (GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture, 0);
 
     // Set the list of draw buffers.
-    GLenum DrawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
+    constexpr GLenum DrawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
     glDrawBuffers (1, DrawBuffers);
     return FramebufferName;
 }
 
 GLuint create_shader_prog_spirv (const uint32_t *fragment_bin,
-    GLsizei fragment_bin_len,
+    const GLsizei fragment_bin_len,
     const uint32_t *vertex_bin,
-    GLsizei vertex_bin_len)
+    const GLsizei vertex_bin_len)
 {
-    GLuint vertexShader = glCreateShader (GL_VERTEX_SHADER);
+    const GLuint vertexShader = glCreateShader (GL_VERTEX_SHADER);
     glShaderBinary (1,
         &vertexShader,
         GL_SHADER_BINARY_FORMAT_SPIR_V_ARB,
         vertex_bin,
         vertex_bin_len);
-    glSpecializeShaderARB (vertexShader, "main", 0, NULL, NULL);
+    glSpecializeShaderARB (vertexShader, "main", 0, nullptr, nullptr);
 
     // check for vertex shader compilation errors
     int success;
@@ -464,29 +465,29 @@ GLuint create_shader_prog_spirv (const uint32_t *fragment_bin,
     glGetShaderiv (vertexShader, GL_COMPILE_STATUS, &success);
     if (!success)
     {
-        glGetShaderInfoLog (vertexShader, 512, NULL, infoLog);
+        glGetShaderInfoLog (vertexShader, 512, nullptr, infoLog);
         LOG (LOG_ERROR, "Vertex shader compilation failed: %s\n", infoLog);
     }
 
     // compile fragment shader
-    GLuint fragmentShader = glCreateShader (GL_FRAGMENT_SHADER);
+    const GLuint fragmentShader = glCreateShader (GL_FRAGMENT_SHADER);
     glShaderBinary (1,
         &fragmentShader,
         GL_SHADER_BINARY_FORMAT_SPIR_V_ARB,
         fragment_bin,
         fragment_bin_len);
-    glSpecializeShaderARB (fragmentShader, "main", 0, NULL, NULL);
+    glSpecializeShaderARB (fragmentShader, "main", 0, nullptr, nullptr);
 
     // check for fragment shader compilation errors
     glGetShaderiv (fragmentShader, GL_COMPILE_STATUS, &success);
     if (!success)
     {
-        glGetShaderInfoLog (fragmentShader, 512, NULL, infoLog);
+        glGetShaderInfoLog (fragmentShader, 512, nullptr, infoLog);
         LOG (LOG_ERROR, "Fragment shader compilation failed: %s\n", infoLog);
     }
 
     // link shaders
-    GLuint shaderProgram = glCreateProgram ();
+    const GLuint shaderProgram = glCreateProgram ();
     glAttachShader (shaderProgram, vertexShader);
     glAttachShader (shaderProgram, fragmentShader);
     glLinkProgram (shaderProgram);
@@ -495,7 +496,7 @@ GLuint create_shader_prog_spirv (const uint32_t *fragment_bin,
     glGetProgramiv (shaderProgram, GL_LINK_STATUS, &success);
     if (!success)
     {
-        glGetProgramInfoLog (shaderProgram, 512, NULL, infoLog);
+        glGetProgramInfoLog (shaderProgram, 512, nullptr, infoLog);
         LOG (LOG_ERROR, "Shader program linking failed: %s\n", infoLog);
     }
 
@@ -508,15 +509,15 @@ GLuint create_shader_prog_spirv (const uint32_t *fragment_bin,
 }
 
 GLuint create_compute_shader_prog_spirv (
-    const uint32_t *compute_bin, GLsizei compute_bin_len)
+    const uint32_t *compute_bin, const GLsizei compute_bin_len)
 {
-    GLuint compute_shader = glCreateShader (GL_COMPUTE_SHADER);
+    const GLuint compute_shader = glCreateShader (GL_COMPUTE_SHADER);
     glShaderBinary (1,
         &compute_shader,
         GL_SHADER_BINARY_FORMAT_SPIR_V_ARB,
         compute_bin,
         compute_bin_len);
-    glSpecializeShaderARB (compute_shader, "main", 0, NULL, NULL);
+    glSpecializeShaderARB (compute_shader, "main", 0, nullptr, nullptr);
 
     // check for vertex shader compilation errors
     int success;
@@ -524,11 +525,11 @@ GLuint create_compute_shader_prog_spirv (
     glGetShaderiv (compute_shader, GL_COMPILE_STATUS, &success);
     if (!success)
     {
-        glGetShaderInfoLog (compute_shader, 512, NULL, infoLog);
+        glGetShaderInfoLog (compute_shader, 512, nullptr, infoLog);
         LOG (LOG_ERROR, "Vertex shader compilation failed: %s\n", infoLog);
     }
 
-    GLuint shaderProgram = glCreateProgram ();
+    const GLuint shaderProgram = glCreateProgram ();
     glAttachShader (shaderProgram, compute_shader);
     glLinkProgram (shaderProgram);
 
@@ -536,7 +537,7 @@ GLuint create_compute_shader_prog_spirv (
     glGetProgramiv (shaderProgram, GL_LINK_STATUS, &success);
     if (!success)
     {
-        glGetProgramInfoLog (shaderProgram, 512, NULL, infoLog);
+        glGetProgramInfoLog (shaderProgram, 512, nullptr, infoLog);
         LOG (LOG_ERROR, "Shader program linking failed: %s\n", infoLog);
     }
 
@@ -555,7 +556,6 @@ GLuint create_compute_shader_prog_spirv (
  */
 GLuint create_compute_shader_prog_string (const char *src)
 {
-    GLuint computeShader, program;
     GLint success;
     GLchar infoLog[512];
     char *c_src = calloc (strlen (src) + 1, sizeof (char));
@@ -579,7 +579,7 @@ GLuint create_compute_shader_prog_string (const char *src)
         = { version_str, "\n", shader_defines_h, "\n", rest_of_src };
 
     // create shader object
-    computeShader = glCreateShader (GL_COMPUTE_SHADER);
+    const GLuint computeShader = glCreateShader (GL_COMPUTE_SHADER);
     glShaderSource (computeShader, 5, srcs, nullptr);
     glCompileShader (computeShader);
 
@@ -594,7 +594,7 @@ GLuint create_compute_shader_prog_string (const char *src)
     }
 
     // create program object
-    program = glCreateProgram ();
+    const GLuint program = glCreateProgram ();
     glAttachShader (program, computeShader);
     glLinkProgram (program);
 
@@ -616,7 +616,7 @@ GLuint create_compute_shader_prog_string (const char *src)
 }
 
 vertex_data_t init_vertex_data (
-    const float (*vertices)[], GLsizeiptr size, int num)
+    const float (*vertices)[], const GLsizeiptr size, const int num)
 {
     // Generate the VBO
     GLuint VBO;
@@ -632,23 +632,23 @@ vertex_data_t init_vertex_data (
     return (vertex_data_t){ .VBO = VBO, .VAO = VAO };
 }
 
-void cleanup_glfw (state_t *s)
+void cleanup_glfw (const state_t *s)
 {
     for (int i = 0; i < NUM_UNIFORMS; i++)
     {
         free (s->uniforms_buffer_object.names[i]);
     }
     LOG (LOG_INFO, "Destroying buffers\n");
-    glDeleteVertexArrays (1, &(s->vertex_data.VAO));
-    glDeleteBuffers (1, &(s->vertex_data.VBO));
-    glDeleteBuffers (1, &(s->uniforms_buffer_object.ubo));
-    glDeleteBuffers (1, &(s->ssbo));
+    glDeleteVertexArrays (1, &s->vertex_data.VAO);
+    glDeleteBuffers (1, &s->vertex_data.VBO);
+    glDeleteBuffers (1, &s->uniforms_buffer_object.ubo);
+    glDeleteBuffers (1, &s->ssbo);
     LOG (LOG_INFO, "Destroying framebuffers\n");
     glDeleteFramebuffers (1, &s->map_a_framebuffer);
     glDeleteFramebuffers (1, &s->map_b_framebuffer);
     LOG (LOG_INFO, "Destroying textures\n");
-    glDeleteTextures (1, &(s->map_a));
-    glDeleteTextures (1, &(s->map_b));
+    glDeleteTextures (1, &s->map_a);
+    glDeleteTextures (1, &s->map_b);
     free (s->uniforms_buffer_object.mem);
     LOG (LOG_INFO, "Destroying shader\n");
     glDeleteProgram (s->shader);
@@ -658,16 +658,16 @@ void cleanup_glfw (state_t *s)
     glfwTerminate ();
 }
 
-static void error_callback (int error, const char *description)
+static void error_callback (const int error, const char *description)
 {
-    LOG (LOG_ERROR, "Error: %s\n", description);
+    LOG (LOG_ERROR, "Error(%d): %s\n", error, description);
 }
 
 GLuint create_shader_prog_string (
     const char *basic_shader_fs_string, const char *basic_shader_vs_string)
 {
-    GLuint vertexShader = glCreateShader (GL_VERTEX_SHADER);
-    glShaderSource (vertexShader, 1, &basic_shader_vs_string, NULL);
+    const GLuint vertexShader = glCreateShader (GL_VERTEX_SHADER);
+    glShaderSource (vertexShader, 1, &basic_shader_vs_string, nullptr);
     glCompileShader (vertexShader);
 
     // check for vertex shader compilation errors
@@ -676,25 +676,25 @@ GLuint create_shader_prog_string (
     glGetShaderiv (vertexShader, GL_COMPILE_STATUS, &success);
     if (!success)
     {
-        glGetShaderInfoLog (vertexShader, 512, NULL, infoLog);
+        glGetShaderInfoLog (vertexShader, 512, nullptr, infoLog);
         LOG (LOG_ERROR, "Vertex shader compilation failed: %s\n", infoLog);
     }
 
     // compile fragment shader
-    GLuint fragmentShader = glCreateShader (GL_FRAGMENT_SHADER);
-    glShaderSource (fragmentShader, 1, &basic_shader_fs_string, NULL);
+    const GLuint fragmentShader = glCreateShader (GL_FRAGMENT_SHADER);
+    glShaderSource (fragmentShader, 1, &basic_shader_fs_string, nullptr);
     glCompileShader (fragmentShader);
 
     // check for fragment shader compilation errors
     glGetShaderiv (fragmentShader, GL_COMPILE_STATUS, &success);
     if (!success)
     {
-        glGetShaderInfoLog (fragmentShader, 512, NULL, infoLog);
+        glGetShaderInfoLog (fragmentShader, 512, nullptr, infoLog);
         LOG (LOG_ERROR, "Fragment shader compilation failed: %s\n", infoLog);
     }
 
     // link shaders
-    GLuint shaderProgram = glCreateProgram ();
+    const GLuint shaderProgram = glCreateProgram ();
     glAttachShader (shaderProgram, vertexShader);
     glAttachShader (shaderProgram, fragmentShader);
     glLinkProgram (shaderProgram);
@@ -703,7 +703,7 @@ GLuint create_shader_prog_string (
     glGetProgramiv (shaderProgram, GL_LINK_STATUS, &success);
     if (!success)
     {
-        glGetProgramInfoLog (shaderProgram, 512, NULL, infoLog);
+        glGetProgramInfoLog (shaderProgram, 512, nullptr, infoLog);
         LOG (LOG_ERROR, "Shader program linking failed: %s\n", infoLog);
     }
 
@@ -714,14 +714,15 @@ GLuint create_shader_prog_string (
     return shaderProgram;
 }
 
-void framebuffer_size_callback (GLFWwindow *window, int width, int height)
+void framebuffer_size_callback (
+    [[maybe_unused]] GLFWwindow *window, const int width, const int height)
 {
     // make sure the viewport matches the new window dimensions; note that
     // width and height will be significantly larger than specified on retina
     // displays.
     glViewport (0, 0, width, height);
-    state.size[0] = width;
-    state.size[1] = height;
+    state.size[0] = (GLfloat)width;
+    state.size[1] = (GLfloat)height;
     memcpy (
         state.uniforms_buffer_object.mem, state.size, 2 * sizeof (GLfloat));
 }
@@ -730,7 +731,7 @@ GLuint create_uniform_buffer (void)
 {
     glUseProgram (state.shader);
 
-    GLuint num_blocks;
+    GLint num_blocks;
     glGetProgramiv (state.shader, GL_ACTIVE_UNIFORM_BLOCKS, &num_blocks);
     LOG (LOG_INFO, "Num uniforms: %u\n", num_blocks);
 
@@ -741,7 +742,7 @@ GLuint create_uniform_buffer (void)
     glGetActiveUniformBlockiv (state.shader,
         state.uniforms_buffer_object.index,
         GL_UNIFORM_BLOCK_DATA_SIZE,
-        &(state.uniforms_buffer_object.block_size));
+        &state.uniforms_buffer_object.block_size);
     LOG (LOG_INFO,
         "Uniform size: %d\n",
         state.uniforms_buffer_object.block_size);
@@ -750,7 +751,7 @@ GLuint create_uniform_buffer (void)
 
     glGetUniformIndices (state.shader,
         NUM_UNIFORMS,
-        (const GLchar *const *)(state.uniforms_buffer_object.names),
+        (const GLchar *const *)state.uniforms_buffer_object.names,
         state.uniforms_buffer_object.indices);
     glGetActiveUniformsiv (state.shader,
         NUM_UNIFORMS,
@@ -799,7 +800,7 @@ GLuint create_uniform_buffer (void)
         2 * sizeof (GLfloat));
     memcpy (state.uniforms_buffer_object.mem
                 + state.uniforms_buffer_object.offset[3],
-        &(state.time),
+        &state.time,
         sizeof (GLint));
 
     GLuint ubo_handle;
@@ -815,14 +816,15 @@ GLuint create_uniform_buffer (void)
     return ubo_handle;
 }
 
-void print_uniforms (GLuint program)
+void print_uniforms (const GLuint program)
 {
     GLint num_blocks = 0;
     glGetProgramInterfaceiv (
         program, GL_UNIFORM_BLOCK, GL_ACTIVE_RESOURCES, &num_blocks);
-    const GLenum block_properties[1] = { GL_NUM_ACTIVE_VARIABLES };
-    const GLenum active_unif_prop[1] = { GL_ACTIVE_VARIABLES };
-    const GLenum unif_properties[3] = { GL_NAME_LENGTH, GL_TYPE, GL_LOCATION };
+    constexpr GLenum block_properties[1] = { GL_NUM_ACTIVE_VARIABLES };
+    constexpr GLenum active_unif_prop[1] = { GL_ACTIVE_VARIABLES };
+    constexpr GLenum unif_properties[3]
+        = { GL_NAME_LENGTH, GL_TYPE, GL_LOCATION };
 
     for (int blockIx = 0; blockIx < num_blocks; ++blockIx)
     {
@@ -833,7 +835,7 @@ void print_uniforms (GLuint program)
             1,
             block_properties,
             1,
-            NULL,
+            nullptr,
             &num_active_unifs);
 
         if (!num_active_unifs)
@@ -846,7 +848,7 @@ void print_uniforms (GLuint program)
             1,
             active_unif_prop,
             num_active_unifs,
-            NULL,
+            nullptr,
             &block_unifs[0]);
         LOG (LOG_INFO, "Uniforms:\n");
         for (int unifIx = 0; unifIx < num_active_unifs; ++unifIx)
@@ -858,7 +860,7 @@ void print_uniforms (GLuint program)
                 3,
                 unif_properties,
                 3,
-                NULL,
+                nullptr,
                 values);
             state.uniforms_buffer_object.names[unifIx]
                 = calloc (values[0], sizeof (char));
@@ -866,7 +868,7 @@ void print_uniforms (GLuint program)
                 GL_UNIFORM,
                 block_unifs[unifIx],
                 values[0],
-                NULL,
+                nullptr,
                 state.uniforms_buffer_object.names[unifIx]);
             LOG (LOG_INFO,
                 " - Name: %s\n",
