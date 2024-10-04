@@ -29,7 +29,7 @@ typedef struct
     char window_name[28];
     GLuint shader;
     GLuint comp_shader_blur;
-    GLuint comp_shader_map;
+    GLuint shader_map;
     GLuint comp_shader_sub;
     struct
     {
@@ -38,14 +38,20 @@ typedef struct
         GLuint x;
         GLuint y;
         GLuint z;
+        bool swap_maps;
     } compute_shader_pipeline[NUM_COMP_SHADERS];
     GLuint map_a;
+    GLuint map_a_framebuffer;
     GLuint map_b;
+    GLuint map_b_framebuffer;
+    GLuint active_framebuffer;
     bool current_map_is_a;
     GLuint ssbo;
     GLint time;
+    GLint selected_ant;
     int render_passes_n;
     vertex_data_t vertex_data;
+    vertex_data_t point_vx_data;
     GLfloat size[2];
     GLfloat map_size[4];
     struct
@@ -69,6 +75,8 @@ typedef struct
         double fx;
         double fy;
         double w;
+        double kin;
+        double pot;
     } ants[NUM_ANTS];
 } state_t;
 
@@ -81,7 +89,8 @@ GLuint create_compute_shader_prog_spirv (
 GLuint create_compute_shader_prog_string (const char *src);
 GLuint create_uniform_buffer (void);
 
-vertex_data_t init_vertex_data (void);
+vertex_data_t init_vertex_data (
+    const float (*vertices)[], GLsizeiptr size, int num);
 
 static GLFWwindow *init_glfw (void);
 
@@ -95,8 +104,9 @@ void framebuffer_size_callback (GLFWwindow *window, int width, int height);
 
 static state_t state = { 0 };
 
-GLuint create_texture ();
-GLuint create_ssbo ();
+GLuint create_texture_2d ();
+GLuint create_framebuffer (GLuint texture);
+GLuint create_ssbo (void *p, size_t size, int flags);
 
 int backend_init (void)
 {
@@ -106,6 +116,7 @@ int backend_init (void)
     state.window_name[2] = 't';
     state.window_name[3] = 's';
     state.window_name[4] = '\0';
+    state.selected_ant = 0;
     if (state.window == NULL)
     {
         return -1;
@@ -120,9 +131,27 @@ int backend_init (void)
         = create_compute_shader_prog_string (shader_sub_comp);
     state.comp_shader_blur
         = create_compute_shader_prog_string (shader_blur_comp);
-    state.comp_shader_map
-        = create_compute_shader_prog_string (shader_map_comp);
-    state.vertex_data = init_vertex_data ();
+    state.shader_map
+        = create_shader_prog_string (shader_map_frag, shader_map_vert);
+    {
+        static constexpr float vertices[] = {
+            -1.0f,
+            -1.0f,
+            0.0f, // v1
+            4.0f,
+            -1.0f,
+            0.0f, // v2
+            -1.0f,
+            4.0f,
+            0.0f, // v3
+        };
+        state.vertex_data = init_vertex_data (&vertices, sizeof (vertices), 3);
+    }
+    {
+        static constexpr float vertices[] = { 0.0f, 0.0f, 1.0f };
+        state.point_vx_data
+            = init_vertex_data (&vertices, sizeof (vertices), 1);
+    }
     state.size[0] = (GLfloat)WINDOW_WIDTH;
     state.size[1] = (GLfloat)WINDOW_HEIGHT;
     state.map_size[0] = (GLfloat)0;
@@ -131,29 +160,43 @@ int backend_init (void)
     state.map_size[3] = (GLfloat)MAP_HEIGHT;
     print_uniforms (state.shader);
     state.uniforms_buffer_object.ubo = create_uniform_buffer ();
-    state.map_a = create_texture ();
-    state.map_b = create_texture ();
-    state.ssbo = create_ssbo ();
+    state.map_a = create_texture_2d ();
+    state.map_b = create_texture_2d ();
     {
-        state.compute_shader_pipeline[0].shader = state.comp_shader_map;
-        state.compute_shader_pipeline[0].name = "map";
-        state.compute_shader_pipeline[0].x = (GLuint)NUM_ANTS;
-        state.compute_shader_pipeline[0].y = 1;
-        state.compute_shader_pipeline[0].z = 1;
+        LOG (LOG_INFO, "Generating particles\n");
+        memset (state.ants_pos, 0, sizeof (state.ants_pos));
+        for (int i = 0; i < SIZE_ELEM * NUM_ANTS; i += SIZE_ELEM)
+        {
+            const GLfloat r = rand ();
+            GLfloat d = rand () % (int)(MAP_HEIGHT / 4);
+            d = d == 0 ? 1 : d;
+            const GLfloat x = cos (r);
+            const GLfloat y = sin (r);
+            state.ants_pos[i + 0] = x * d;
+            state.ants_pos[i + 1] = y * d;
+        }
     }
+    state.ssbo = create_ssbo (
+        state.ants_pos, sizeof (state.ants_pos), GL_DYNAMIC_STORAGE_BIT);
     {
-        state.compute_shader_pipeline[1].shader = state.comp_shader_sub;
-        state.compute_shader_pipeline[1].name = "sub";
-        state.compute_shader_pipeline[1].x = (GLuint)MAP_WIDTH;
-        state.compute_shader_pipeline[1].y = (GLuint)MAP_HEIGHT;
-        state.compute_shader_pipeline[1].z = 1;
-    }
-    {
-        state.compute_shader_pipeline[2].shader = state.comp_shader_blur;
-        state.compute_shader_pipeline[2].name = "blur";
-        state.compute_shader_pipeline[2].x = (GLuint)MAP_WIDTH;
-        state.compute_shader_pipeline[2].y = (GLuint)MAP_HEIGHT;
-        state.compute_shader_pipeline[2].z = 1;
+        int i = 0;
+        {
+            state.compute_shader_pipeline[i].shader = state.comp_shader_sub;
+            state.compute_shader_pipeline[i].name = "sub";
+            state.compute_shader_pipeline[i].x = (GLuint)MAP_WIDTH;
+            state.compute_shader_pipeline[i].y = (GLuint)MAP_HEIGHT;
+            state.compute_shader_pipeline[i].z = 1;
+            state.compute_shader_pipeline[i].swap_maps = true;
+        }
+        i++;
+        {
+            state.compute_shader_pipeline[i].shader = state.comp_shader_blur;
+            state.compute_shader_pipeline[i].name = "blur";
+            state.compute_shader_pipeline[i].x = (GLuint)MAP_WIDTH;
+            state.compute_shader_pipeline[i].y = (GLuint)MAP_HEIGHT;
+            state.compute_shader_pipeline[i].z = 1;
+            state.compute_shader_pipeline[i].swap_maps = true;
+        }
     }
     LOG (LOG_INFO, "Compute shader pipeline:\n");
     for (int i = 0; i < NUM_COMP_SHADERS; i++)
@@ -164,20 +207,41 @@ int backend_init (void)
         2, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
     glBindImageTexture (
         3, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+    state.active_framebuffer = state.map_b_framebuffer;
     state.current_map_is_a = true;
     for (int i = 0; i < NUM_ANTS; i++)
     {
-        state.ants[i].x = &state.ants_pos[i * 2];
-        state.ants[i].y = &state.ants_pos[i * 2 + 1];
+        state.ants[i].x = &state.ants_pos[i * SIZE_ELEM];
+        state.ants[i].y = &state.ants_pos[i * SIZE_ELEM + 1];
         state.ants[i].vx = 0.0;
         state.ants[i].vy = 0.0;
         state.ants[i].fx = 0;
         state.ants[i].fy = 0;
-        state.ants[i].w = 1000000;
+        state.ants[i].w = 2.0E14;
+        state.ants[i].kin = 0;
+        state.ants[i].pot = 0;
     }
-    state.ants[0].w = 10000000000;
+    state.ants[0].w = 2.0E12;
     state.ants[0].vx = 0;
     state.ants[0].vy = 0;
+    {
+        GLfloat max_wheight = 0.0;
+        for (int i = 0; i < NUM_ANTS; i++)
+        {
+            if (max_wheight < state.ants[i].w)
+            {
+                max_wheight = state.ants[i].w;
+            }
+        }
+        memcpy (state.uniforms_buffer_object.mem
+                    + state.uniforms_buffer_object.offset[2],
+            &(max_wheight),
+            sizeof (GLfloat));
+        glBufferSubData (GL_UNIFORM_BUFFER,
+            0,
+            state.uniforms_buffer_object.block_size,
+            state.uniforms_buffer_object.mem);
+    }
     state.time = 0;
     LOG (LOG_INFO, "finished init\n");
 }
@@ -219,12 +283,14 @@ void draw (void)
         state.uniforms_buffer_object.index,
         state.uniforms_buffer_object.ubo);
     glBindBufferBase (GL_SHADER_STORAGE_BUFFER, 1, state.ssbo);
-
-    glBindVertexArray (state.vertex_data.VAO);
     state.time++;
     memcpy (state.uniforms_buffer_object.mem
-                + state.uniforms_buffer_object.offset[2],
+                + state.uniforms_buffer_object.offset[3],
         &(state.time),
+        sizeof (GLint));
+    memcpy (state.uniforms_buffer_object.mem
+                + state.uniforms_buffer_object.offset[4],
+        &(state.selected_ant),
         sizeof (GLint));
     glBufferSubData (GL_UNIFORM_BUFFER,
         0,
@@ -235,16 +301,28 @@ void draw (void)
         0,
         SIZE_ELEM * NUM_ANTS * sizeof (GLfloat),
         state.ants_pos);
+    glBindVertexArray (state.point_vx_data.VAO);
+    glBindFramebuffer (GL_FRAMEBUFFER, state.active_framebuffer);
+    glViewport (-MAP_WIDTH / 2, -MAP_HEIGHT / 2, MAP_WIDTH, MAP_HEIGHT);
+    glUseProgram (state.shader_map);
+    glDrawArraysInstanced (GL_POINTS, 0, 1, NUM_ANTS);
+    state.current_map_is_a = swap_textures (state.current_map_is_a);
+
     for (int i = 0; i < NUM_COMP_SHADERS; i++)
     {
+        glBindFramebuffer (GL_FRAMEBUFFER, state.active_framebuffer);
         glUseProgram (state.compute_shader_pipeline[i].shader);
         glDispatchCompute (state.compute_shader_pipeline[i].x,
             state.compute_shader_pipeline[i].y,
             state.compute_shader_pipeline[i].z);
         glMemoryBarrier (GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-        state.current_map_is_a = swap_textures (state.current_map_is_a);
+        if (state.compute_shader_pipeline[i].swap_maps)
+        {
+            state.current_map_is_a = swap_textures (state.current_map_is_a);
+        }
     }
-
+    glBindFramebuffer (GL_FRAMEBUFFER, 0);
+    glBindVertexArray (state.vertex_data.VAO);
     glUseProgram (state.shader);
     glDrawArrays (GL_TRIANGLES, 0, 3);
     state.current_map_is_a = swap_textures (state.current_map_is_a);
@@ -258,21 +336,37 @@ void update (void)
 {
     for (int i = 0; i < NUM_ANTS; i++)
     {
-        for (int j = 0; j < NUM_ANTS; j++)
+        state.ants[i].fx = 0;
+        state.ants[i].fy = 0;
+    }
+    for (int i = 0; i < NUM_ANTS; i++)
+    {
+        const double i_w = state.ants[i].w;
+        for (int j = i + 1; j < NUM_ANTS; j++)
         {
-            if (j != i)
+            const double dx = *state.ants[j].x - *state.ants[i].x;
+            const double dy = *state.ants[j].y - *state.ants[i].y;
+            const double j_w = state.ants[j].w;
+            double dist = sqrt (dx * dx + dy * dy);
+            if (dist < EPSILON)
             {
-                double dx = *state.ants[i].x - *state.ants[j].x;
-                double dy = *state.ants[i].y - *state.ants[j].y;
-                double dist = sqrt (dx * dx + dy * dy);
-                double F = (6.673e-11 * state.ants[i].w * state.ants[j].w)
-                         / (dist * dist + 3E9);
-                state.ants[i].fx += F * dx / dist;
-                state.ants[i].fy += F * dy / dist;
+                dist = EPSILON;
             }
+            const double F
+                = (GRAVITATIONAL_CONSTANT * i_w * j_w) / (dist * dist);
+            const double force_x = F * dx / dist;
+            state.ants[i].fx += force_x;
+            const double force_y = F * dy / dist;
+            state.ants[i].fy += force_y;
+            state.ants[j].fx -= force_x;
+            state.ants[j].fy -= force_y;
         }
-        state.ants[i].vx += state.ants[i].fx / state.ants[i].w;
-        state.ants[i].vy += state.ants[i].fy / state.ants[i].w;
+    }
+    for (auto i = 0; i < NUM_ANTS; i++)
+    {
+        const double i_w = state.ants[i].w;
+        state.ants[i].vx += state.ants[i].fx / i_w;
+        state.ants[i].vy += state.ants[i].fy / i_w;
         *state.ants[i].x += state.ants[i].vx;
         *state.ants[i].y += state.ants[i].vy;
     }
@@ -290,6 +384,7 @@ bool swap_textures (bool current_map_is_a)
             2, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
         glBindImageTexture (
             3, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+        state.active_framebuffer = state.map_a_framebuffer;
     }
     else
     {
@@ -297,35 +392,21 @@ bool swap_textures (bool current_map_is_a)
             2, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
         glBindImageTexture (
             3, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+        state.active_framebuffer = state.map_b_framebuffer;
     }
     return !current_map_is_a;
 }
 
-GLuint create_ssbo ()
+GLuint create_ssbo (void *p, size_t size, int flags)
 {
     GLuint SSBO;
     glCreateBuffers (1, &SSBO);
-    LOG (LOG_INFO, "Generating ants\n");
-    memset (state.ants_pos, 0, sizeof (state.ants_pos));
-    for (int i = 0; i < SIZE_ELEM * NUM_ANTS; i += SIZE_ELEM)
-    {
-        const GLfloat r = rand ();
-        GLfloat d = rand () % (int)(MAP_HEIGHT / 2.5);
-        d = d == 0 ? 1 : d;
-        const GLfloat x = cos (r);
-        const GLfloat y = sin (r);
-        state.ants_pos[i + 0] = MAP_WIDTH / 2 + x * d;
-        state.ants_pos[i + 1] = MAP_HEIGHT / 2 + y * d;
-    }
-    glNamedBufferStorage (SSBO,
-        SIZE_ELEM * sizeof (GLfloat) * NUM_ANTS,
-        state.ants_pos,
-        GL_DYNAMIC_STORAGE_BIT);
+    glNamedBufferStorage (SSBO, size, p, flags);
     glBindBuffer (GL_SHADER_STORAGE_BUFFER, 0);
     return SSBO;
 }
 
-GLuint create_texture ()
+GLuint create_texture_2d ()
 {
     GLuint texture;
     glGenTextures (1, &texture);
@@ -344,6 +425,24 @@ GLuint create_texture ()
     glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     free (tmp_map);
     return texture;
+}
+
+GLuint create_framebuffer (GLuint texture)
+{
+    GLuint FramebufferName = 0;
+    glGenFramebuffers (1, &FramebufferName);
+    glBindFramebuffer (GL_FRAMEBUFFER, FramebufferName);
+    glBindTexture (GL_TEXTURE_2D, texture);
+
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+    glFramebufferTexture (GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture, 0);
+
+    // Set the list of draw buffers.
+    GLenum DrawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
+    glDrawBuffers (1, DrawBuffers);
+    return FramebufferName;
 }
 
 GLuint create_shader_prog_spirv (const uint32_t *fragment_bin,
@@ -448,23 +547,49 @@ GLuint create_compute_shader_prog_spirv (
     return shaderProgram;
 }
 
+/**
+ * compiles a compute shader
+ * @param src the shader source
+ * @return the handle for the linked program, 0 on error
+ * @remark "#version" has to be in the first line
+ */
 GLuint create_compute_shader_prog_string (const char *src)
 {
     GLuint computeShader, program;
     GLint success;
     GLchar infoLog[512];
+    char *c_src = calloc (strlen (src) + 1, sizeof (char));
+    strcpy (c_src, src);
+    char *version_str = c_src;
+    char *rest_of_src = c_src;
+    while (*rest_of_src != '\0')
+    {
+        if (*rest_of_src != '\n')
+        {
+            rest_of_src++;
+        }
+        else
+        {
+            *rest_of_src = '\0';
+            rest_of_src++;
+            break;
+        }
+    }
+    const char *srcs[]
+        = { version_str, "\n", shader_defines_h, "\n", rest_of_src };
 
     // create shader object
     computeShader = glCreateShader (GL_COMPUTE_SHADER);
-    glShaderSource (computeShader, 1, &src, NULL);
+    glShaderSource (computeShader, 5, srcs, nullptr);
     glCompileShader (computeShader);
 
     // check for shader compile errors
     glGetShaderiv (computeShader, GL_COMPILE_STATUS, &success);
     if (!success)
     {
-        glGetShaderInfoLog (computeShader, 512, NULL, infoLog);
+        glGetShaderInfoLog (computeShader, 512, nullptr, infoLog);
         LOG (LOG_ERROR, "Shader compilation failed: %s\n", infoLog);
+        free (c_src);
         return 0;
     }
 
@@ -477,30 +602,22 @@ GLuint create_compute_shader_prog_string (const char *src)
     glGetProgramiv (program, GL_LINK_STATUS, &success);
     if (!success)
     {
-        glGetProgramInfoLog (program, 512, NULL, infoLog);
+        glGetProgramInfoLog (program, 512, nullptr, infoLog);
         LOG (LOG_ERROR, "Program linking failed: %s\n", infoLog);
+        free (c_src);
         return 0;
     }
 
     // clean up
     glDeleteShader (computeShader);
 
+    free (c_src);
     return program;
 }
 
-vertex_data_t init_vertex_data (void)
+vertex_data_t init_vertex_data (
+    const float (*vertices)[], GLsizeiptr size, int num)
 {
-    const static float vertices[] = {
-        -1.0,
-        -1.0,
-        0.0, // v1
-        4.0,
-        -1.0,
-        0.0, // v2
-        -1.0,
-        4.0,
-        0.0, // v3
-    };
     // Generate the VBO
     GLuint VBO;
     GLuint VAO;
@@ -508,10 +625,9 @@ vertex_data_t init_vertex_data (void)
     glGenVertexArrays (1, &VAO);
     glBindVertexArray (VAO);
     glBindBuffer (GL_ARRAY_BUFFER, VBO);
-    glBufferData (
-        GL_ARRAY_BUFFER, sizeof (vertices), vertices, GL_STATIC_DRAW);
+    glBufferData (GL_ARRAY_BUFFER, size, *vertices, GL_STATIC_DRAW);
     glVertexAttribPointer (
-        0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof (float), (void *)0);
+        0, num, GL_FLOAT, GL_FALSE, 3 * sizeof (float), nullptr);
     glEnableVertexAttribArray (0);
     return (vertex_data_t){ .VBO = VBO, .VAO = VAO };
 }
@@ -527,6 +643,9 @@ void cleanup_glfw (state_t *s)
     glDeleteBuffers (1, &(s->vertex_data.VBO));
     glDeleteBuffers (1, &(s->uniforms_buffer_object.ubo));
     glDeleteBuffers (1, &(s->ssbo));
+    LOG (LOG_INFO, "Destroying framebuffers\n");
+    glDeleteFramebuffers (1, &s->map_a_framebuffer);
+    glDeleteFramebuffers (1, &s->map_b_framebuffer);
     LOG (LOG_INFO, "Destroying textures\n");
     glDeleteTextures (1, &(s->map_a));
     glDeleteTextures (1, &(s->map_b));
@@ -679,7 +798,7 @@ GLuint create_uniform_buffer (void)
         state.size,
         2 * sizeof (GLfloat));
     memcpy (state.uniforms_buffer_object.mem
-                + state.uniforms_buffer_object.offset[1],
+                + state.uniforms_buffer_object.offset[3],
         &(state.time),
         sizeof (GLint));
 

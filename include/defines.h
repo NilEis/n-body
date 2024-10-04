@@ -3,10 +3,13 @@
 
 #define WINDOW_WIDTH 1920
 #define WINDOW_HEIGHT 1080
-#define MAP_WIDTH (1920/4)
-#define MAP_HEIGHT (1080/4)
-#define NUM_UNIFORMS 3
-#define NUM_ANTS 7000
-#define NUM_COMP_SHADERS 3
+#define MAP_WIDTH (1920/2)
+#define MAP_HEIGHT (1080/2)
+#define NUM_UNIFORMS 5
+#define NUM_ANTS 2000
+#define NUM_COMP_SHADERS 2
+
+#define GRAVITATIONAL_CONSTANT 6.67E-11
+#define EPSILON 1E4
 
 #endif // DEFINES_H

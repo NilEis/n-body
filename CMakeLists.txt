@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.9.0)
+cmake_minimum_required(VERSION 3.21.0)
 project(
         n-body
         VERSION 0.1.0
@@ -25,9 +25,10 @@ cpmaddpackage(
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake)
 
 create_resources(
-        ${CMAKE_CURRENT_SOURCE_DIR}/shader "shader_"
-        ${CMAKE_CURRENT_BINARY_DIR}/generated/src/shader.c
-        ${CMAKE_CURRENT_BINARY_DIR}/generated/include/shader.h)
+        FILES ${CMAKE_CURRENT_SOURCE_DIR}/shader/* ${CMAKE_CURRENT_SOURCE_DIR}/include/defines.h
+        PREFIX "shader_"
+        SOURCE_NAME ${CMAKE_CURRENT_BINARY_DIR}/generated/src/shader.c
+        HEADER_NAME ${CMAKE_CURRENT_BINARY_DIR}/generated/include/shader.h)
 
 add_subdirectory("${glad_SOURCE_DIR}/cmake" "${glad_BINARY_DIR}")
 
@@ -49,6 +50,8 @@ target_precompile_headers(n-body PRIVATE ${HEADER_FILES})
 target_include_directories(n-body PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/ ${CMAKE_CURRENT_BINARY_DIR}/generated/include/)
 
 target_link_libraries(n-body glfw glad_gl_core_46)
+
+set_property(TARGET n-body PROPERTY C_STANDARD 23)
 
 include(CheckIPOSupported)
 
