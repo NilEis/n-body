@@ -161,7 +161,9 @@ int backend_init (void)
     print_uniforms (state.shader);
     state.uniforms_buffer_object.ubo = create_uniform_buffer ();
     state.map_a = create_texture_2d ();
+    state.map_a_framebuffer = create_framebuffer (state.map_a);
     state.map_b = create_texture_2d ();
+    state.map_b_framebuffer = create_framebuffer (state.map_b);
     {
         LOG (LOG_INFO, "Generating particles\n");
         memset (state.ants_pos, 0, sizeof (state.ants_pos));
@@ -276,7 +278,7 @@ GLFWwindow *init_glfw (void)
 
 void draw (void)
 {
-    glClearColor (0.0f, 0.0f, 0.0f, 1.0f);
+    glClearColor (1.0f, 0.0f, 0.0f, 1.0f);
     glClear (GL_COLOR_BUFFER_BIT);
 
     glBindBuffer (GL_UNIFORM_BUFFER, state.uniforms_buffer_object.ubo);
@@ -304,7 +306,6 @@ void draw (void)
         state.ants_pos);
     glBindVertexArray (state.point_vx_data.VAO);
     glBindFramebuffer (GL_FRAMEBUFFER, state.active_framebuffer);
-    glViewport (-MAP_WIDTH / 2, -MAP_HEIGHT / 2, MAP_WIDTH, MAP_HEIGHT);
     glUseProgram (state.shader_map);
     glDrawArraysInstanced (GL_POINTS, 0, 1, NUM_ANTS);
     state.current_map_is_a = swap_textures (state.current_map_is_a);
@@ -666,8 +667,48 @@ static void error_callback (const int error, const char *description)
 GLuint create_shader_prog_string (
     const char *basic_shader_fs_string, const char *basic_shader_vs_string)
 {
+    char *vs_c_src
+        = calloc (strlen (basic_shader_vs_string) + 1, sizeof (char));
+    strcpy (vs_c_src, basic_shader_vs_string);
+    char *vs_version_str = vs_c_src;
+    char *vs_rest_of_src = vs_c_src;
+    while (*vs_rest_of_src != '\0')
+    {
+        if (*vs_rest_of_src != '\n')
+        {
+            vs_rest_of_src++;
+        }
+        else
+        {
+            *vs_rest_of_src = '\0';
+            vs_rest_of_src++;
+            break;
+        }
+    }
+    const char *vs_srcs[]
+        = { vs_version_str, "\n", shader_defines_h, "\n", vs_rest_of_src };
+
+    char *c_src = calloc (strlen (basic_shader_fs_string) + 1, sizeof (char));
+    strcpy (c_src, basic_shader_fs_string);
+    char *version_str = c_src;
+    char *rest_of_src = c_src;
+    while (*rest_of_src != '\0')
+    {
+        if (*rest_of_src != '\n')
+        {
+            rest_of_src++;
+        }
+        else
+        {
+            *rest_of_src = '\0';
+            rest_of_src++;
+            break;
+        }
+    }
+    const char *fs_srcs[]
+        = { version_str, "\n", shader_defines_h, "\n", rest_of_src };
     const GLuint vertexShader = glCreateShader (GL_VERTEX_SHADER);
-    glShaderSource (vertexShader, 1, &basic_shader_vs_string, nullptr);
+    glShaderSource (vertexShader, 5, vs_srcs, nullptr);
     glCompileShader (vertexShader);
 
     // check for vertex shader compilation errors
@@ -682,7 +723,7 @@ GLuint create_shader_prog_string (
 
     // compile fragment shader
     const GLuint fragmentShader = glCreateShader (GL_FRAGMENT_SHADER);
-    glShaderSource (fragmentShader, 1, &basic_shader_fs_string, nullptr);
+    glShaderSource (fragmentShader, 5, fs_srcs, nullptr);
     glCompileShader (fragmentShader);
 
     // check for fragment shader compilation errors
@@ -711,6 +752,8 @@ GLuint create_shader_prog_string (
     // necessary
     glDeleteShader (vertexShader);
     glDeleteShader (fragmentShader);
+    free (vs_c_src);
+    free (c_src);
     return shaderProgram;
 }
 

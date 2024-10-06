@@ -6,7 +6,7 @@
 #define MAP_WIDTH (1920/2)
 #define MAP_HEIGHT (1080/2)
 #define NUM_UNIFORMS 5
-#define NUM_ANTS 2000
+#define NUM_ANTS 500
 #define NUM_COMP_SHADERS 2
 
 #define GRAVITATIONAL_CONSTANT 6.67E-11

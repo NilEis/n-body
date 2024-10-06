@@ -28,5 +28,8 @@ layout(std430, binding = 1) buffer ant_buffer {
 };
 
 void main() {
-    gl_Position = vec4(in_pos+vec3(ants[gl_InstanceID].xy, 0.0), 1.0);
+    vec3 p = in_pos+vec3(ants[gl_InstanceID].xy, 0.0);
+    p.xy /= vec2(MAP_WIDTH, MAP_HEIGHT);
+    p.xy -= 0.5;
+    gl_Position = vec4(p, 1.0);
 }
