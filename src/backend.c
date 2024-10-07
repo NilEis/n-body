@@ -80,7 +80,7 @@ typedef struct
 
 static void error_callback (int error, const char *description);
 
-GLuint create_uniform_buffer (void);
+GLuint create_uniform_buffer (GLuint program);
 
 vertex_data_t init_vertex_data (
     const float (*vertices)[], GLsizeiptr size, int num);
@@ -163,8 +163,9 @@ int backend_init (void)
     state.map_size[1] = (GLfloat)0;
     state.map_size[2] = (GLfloat)MAP_WIDTH;
     state.map_size[3] = (GLfloat)MAP_HEIGHT;
+    LOG(LOG_INFO,"Main uniforms:\n");
     print_uniforms (state.shader);
-    state.uniforms_buffer_object.ubo = create_uniform_buffer ();
+    state.uniforms_buffer_object.ubo = create_uniform_buffer (state.shader_map);
     state.map_a = create_texture_2d ();
     state.map_a_framebuffer = create_framebuffer (state.map_a);
     state.map_b = create_texture_2d ();
@@ -513,19 +514,19 @@ void framebuffer_size_callback (
         state.uniforms_buffer_object.mem, state.size, 2 * sizeof (GLfloat));
 }
 
-GLuint create_uniform_buffer (void)
+GLuint create_uniform_buffer (const GLuint program)
 {
-    glUseProgram (state.shader);
+    glUseProgram (program);
 
     GLint num_blocks;
-    glGetProgramiv (state.shader, GL_ACTIVE_UNIFORM_BLOCKS, &num_blocks);
-    LOG (LOG_INFO, "Num uniforms: %u\n", num_blocks);
+    glGetProgramiv (program, GL_ACTIVE_UNIFORM_BLOCKS, &num_blocks);
+    LOG (LOG_INFO, "Num uniform blocks: %u\n", num_blocks);
 
     state.uniforms_buffer_object.index
-        = glGetUniformBlockIndex (state.shader, "uniforms_buffer");
+        = glGetUniformBlockIndex (program, "uniforms_buffer");
     LOG (LOG_INFO, "Uniform index: %d\n", state.uniforms_buffer_object.index);
 
-    glGetActiveUniformBlockiv (state.shader,
+    glGetActiveUniformBlockiv (program,
         state.uniforms_buffer_object.index,
         GL_UNIFORM_BLOCK_DATA_SIZE,
         &state.uniforms_buffer_object.block_size);
@@ -535,43 +536,15 @@ GLuint create_uniform_buffer (void)
     state.uniforms_buffer_object.mem
         = calloc (1, state.uniforms_buffer_object.block_size);
 
-    glGetUniformIndices (state.shader,
+    glGetUniformIndices (program,
         NUM_UNIFORMS,
         (const GLchar *const *)state.uniforms_buffer_object.names,
         state.uniforms_buffer_object.indices);
-    glGetActiveUniformsiv (state.shader,
+    glGetActiveUniformsiv (program,
         NUM_UNIFORMS,
         state.uniforms_buffer_object.indices,
         GL_UNIFORM_OFFSET,
         state.uniforms_buffer_object.offset);
-    /* GLboolean sorted = GL_FALSE;
-    int n = NUM_UNIFORMS;
-    while (!sorted)
-    {
-        sorted = GL_TRUE;
-        for (int i = 1; i < n; i++)
-        {
-            if (state.uniforms_buffer_object.offset[i] <
-    state.uniforms_buffer_object.offset[i - 1])
-            {
-                GLuint tmp_index = state.uniforms_buffer_object.indices[i - 1];
-                GLuint tmp_offset = state.uniforms_buffer_object.offset[i - 1];
-                char *tmp_char = state.uniforms_buffer_object.names[i - 1];
-
-                state.uniforms_buffer_object.indices[i - 1] =
-    state.uniforms_buffer_object.indices[i];
-                state.uniforms_buffer_object.offset[i - 1] =
-    state.uniforms_buffer_object.offset[i];
-                state.uniforms_buffer_object.names[i - 1] =
-    state.uniforms_buffer_object.names[i];
-
-                state.uniforms_buffer_object.indices[i] = tmp_index;
-                state.uniforms_buffer_object.offset[i] = tmp_offset;
-                state.uniforms_buffer_object.names[i] = tmp_char;
-                sorted = GL_FALSE;
-            }
-        }
-    } */
     for (int i = 0; i < NUM_UNIFORMS; i++)
     {
         LOG (LOG_INFO,
@@ -636,7 +609,6 @@ void print_uniforms (const GLuint program)
             num_active_unifs,
             nullptr,
             &block_unifs[0]);
-        LOG (LOG_INFO, "Uniforms:\n");
         for (int unifIx = 0; unifIx < num_active_unifs; ++unifIx)
         {
             GLint values[3];

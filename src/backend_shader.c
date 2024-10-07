@@ -26,8 +26,13 @@ GLuint compile_shader (const char *src, const GLenum type)
             break;
         }
     }
-    const char *srcs[]
-        = { version_str, "\n", shader_defines_h, "\n", rest_of_src };
+    const char *srcs[] = { version_str,
+        "\n",
+        shader_defines_h,
+        "\n",
+        shader_shader_includes_glsl,
+        "\n",
+        rest_of_src };
 
     LOG (LOG_INFO, "Compiling ");
     switch (type)
@@ -58,7 +63,7 @@ GLuint compile_shader (const char *src, const GLenum type)
 
     // create shader object
     const GLuint shader = glCreateShader (type);
-    glShaderSource (shader, 5, srcs, nullptr);
+    glShaderSource (shader, 7, srcs, nullptr);
     glCompileShader (shader);
 
     // check for shader compile errors

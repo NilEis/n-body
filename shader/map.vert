@@ -1,31 +1,19 @@
-#version 460
+#version 450
 
 #extension GL_GOOGLE_cpp_style_line_directive : enable
 #ifdef GL_GOOGLE_cpp_style_line_directive
 #line 2 "map.vert"
 #endif
 
-#ifndef MAP_WIDTH
-#define MAP_WIDTH (1920/4)
-#endif
-
-#ifndef MAP_HEIGHT
-#define MAP_HEIGHT (1080/4)
-#endif
-
 layout(location = 0) in vec3 in_pos;
 
-layout(binding = 0) uniform uniforms_buffer {
-    vec2 size;
-    vec4 map_size;
-    float max_weight;
-    int time;
-    int field;
-};
+#ifndef DEFINES_H
+#include "../include/defines.h"
+#endif//DEFINES_H
 
-layout(std430, binding = 1) buffer ant_buffer {
-    vec2 ants[];
-};
+#ifndef SHADER_INCLUDES_GLSL
+#include "shader_includes.glsl"
+#endif//SHADER_INCLUDES_GLSL
 
 float map_value(float v, vec2 in_range, vec2 out_range)
 {

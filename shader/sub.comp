@@ -1,24 +1,17 @@
-#version 460
+#version 450
 
 #extension GL_GOOGLE_cpp_style_line_directive : enable
 #ifdef GL_GOOGLE_cpp_style_line_directive
 #line 2 "sub.comp"
 #endif
 
-layout(binding = 0) uniform uniforms_buffer {
-    vec2 size;
-    vec4 map_size;
-    float max_weight;
-    int time;
-    int field;
-};
+#ifndef DEFINES_H
+#include "../include/defines.h"
+#endif//DEFINES_H
 
-layout(std430, binding = 1) buffer ant_buffer {
-    vec2 ants[];
-};
-
-layout(binding = 2, R32F) uniform image2D map_a;
-layout(binding = 3, R32F) uniform image2D map_b;
+#ifndef SHADER_INCLUDES_GLSL
+#include "shader_includes.glsl"
+#endif//SHADER_INCLUDES_GLSL
 
 const float S = 0.01;
 
@@ -26,6 +19,6 @@ layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 void main() {
     ivec2 index = ivec2(gl_GlobalInvocationID.xy);
-    float v = imageLoad(map_a, index).r;
-    imageStore(map_b, index, vec4((v - S) * float(0.0 < v)));
+    float v = imageLoad(map_in, index).r;
+    imageStore(map_out, index, vec4((v - S) * float(0.0 < v)));
 }

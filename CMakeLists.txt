@@ -24,6 +24,8 @@ cpmaddpackage(
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake)
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/sanitizer.cmake)
+
 create_resources(
         FILES ${CMAKE_CURRENT_SOURCE_DIR}/shader/* ${CMAKE_CURRENT_SOURCE_DIR}/include/defines.h
         PREFIX "shader_"
@@ -32,7 +34,7 @@ create_resources(
 
 add_subdirectory("${glad_SOURCE_DIR}/cmake" "${glad_BINARY_DIR}")
 
-glad_add_library(glad_gl_core_46 REPRODUCIBLE API gl:core=4.6)
+glad_add_library(glad_gl_core_45 REPRODUCIBLE API gl:core=4.5)
 
 file(GLOB N-BODY_SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
 
@@ -49,7 +51,7 @@ target_precompile_headers(n-body PRIVATE ${HEADER_FILES})
 
 target_include_directories(n-body PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/ ${CMAKE_CURRENT_BINARY_DIR}/generated/include/)
 
-target_link_libraries(n-body glfw glad_gl_core_46)
+target_link_libraries(n-body glfw glad_gl_core_45)
 
 set_property(TARGET n-body PROPERTY C_STANDARD 23)
 
