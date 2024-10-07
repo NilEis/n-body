@@ -163,9 +163,10 @@ int backend_init (void)
     state.map_size[1] = (GLfloat)0;
     state.map_size[2] = (GLfloat)MAP_WIDTH;
     state.map_size[3] = (GLfloat)MAP_HEIGHT;
-    LOG(LOG_INFO,"Main uniforms:\n");
+    LOG (LOG_INFO, "Main uniforms:\n");
     print_uniforms (state.shader);
-    state.uniforms_buffer_object.ubo = create_uniform_buffer (state.shader_map);
+    state.uniforms_buffer_object.ubo
+        = create_uniform_buffer (state.shader_map);
     state.map_a = create_texture_2d ();
     state.map_a_framebuffer = create_framebuffer (state.map_a);
     state.map_b = create_texture_2d ();
@@ -241,10 +242,6 @@ int backend_init (void)
                 max_wheight = (GLfloat)state.ants[i].w;
             }
         }
-        memcpy (state.uniforms_buffer_object.mem
-                    + state.uniforms_buffer_object.offset[2],
-            &max_wheight,
-            sizeof (GLfloat));
         glBufferSubData (GL_UNIFORM_BUFFER,
             0,
             state.uniforms_buffer_object.block_size,
@@ -294,12 +291,8 @@ void draw (void)
     glBindBufferBase (GL_SHADER_STORAGE_BUFFER, 1, state.ssbo);
     state.time++;
     memcpy (state.uniforms_buffer_object.mem
-                + state.uniforms_buffer_object.offset[3],
+                + state.uniforms_buffer_object.offset[TIME_UNIFORM_INDEX],
         &state.time,
-        sizeof (GLint));
-    memcpy (state.uniforms_buffer_object.mem
-                + state.uniforms_buffer_object.offset[4],
-        &state.selected_ant,
         sizeof (GLint));
     glBufferSubData (GL_UNIFORM_BUFFER,
         0,
@@ -419,14 +412,14 @@ GLuint create_texture_2d ()
     GLuint texture;
     glGenTextures (1, &texture);
     glBindTexture (GL_TEXTURE_2D, texture);
-    GLfloat *tmp_map = calloc (MAP_WIDTH * MAP_HEIGHT, sizeof (GLfloat));
+    GLfloat *tmp_map = calloc (MAP_WIDTH * MAP_HEIGHT, 3 * sizeof (GLfloat));
     glTexImage2D (GL_TEXTURE_2D,
         0,
         GL_R32F,
         MAP_WIDTH,
         MAP_HEIGHT,
         0,
-        GL_RED,
+        GL_RGB,
         GL_FLOAT,
         tmp_map);
     glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -507,7 +500,6 @@ void framebuffer_size_callback (
     // make sure the viewport matches the new window dimensions; note that
     // width and height will be significantly larger than specified on retina
     // displays.
-    glViewport (0, 0, width, height);
     state.size[0] = (GLfloat)width;
     state.size[1] = (GLfloat)height;
     memcpy (
@@ -554,11 +546,15 @@ GLuint create_uniform_buffer (const GLuint program)
             state.uniforms_buffer_object.offset[i]);
     }
     memcpy (state.uniforms_buffer_object.mem
-                + state.uniforms_buffer_object.offset[0],
+                + state.uniforms_buffer_object.offset[SIZE_UNIFORM_INDEX],
         state.size,
         2 * sizeof (GLfloat));
     memcpy (state.uniforms_buffer_object.mem
-                + state.uniforms_buffer_object.offset[3],
+                + state.uniforms_buffer_object.offset[MAP_SIZE_INDEX],
+        state.map_size,
+        4 * sizeof (GLfloat));
+    memcpy (state.uniforms_buffer_object.mem
+                + state.uniforms_buffer_object.offset[TIME_UNIFORM_INDEX],
         &state.time,
         sizeof (GLint));
 

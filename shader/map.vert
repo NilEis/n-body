@@ -23,7 +23,7 @@ float map_value(float v, vec2 in_range, vec2 out_range)
 
 void main() {
     vec3 p = in_pos+vec3(ants[gl_InstanceID].xy, 0.0);
-    p.xy /= vec2(MAP_WIDTH, MAP_HEIGHT);
+    p.xy /= map_size.zw;
     p.xy -= 0.5;
     gl_Position = vec4(p, 1.0);
 }

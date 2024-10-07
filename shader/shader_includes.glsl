@@ -4,9 +4,7 @@
 layout(binding = 0) uniform uniforms_buffer {
     vec2 size;
     vec4 map_size;
-    float max_weight;
     int time;
-    int field;
 };
 
 layout(std430, binding = 1) buffer ant_buffer {
