@@ -15,12 +15,6 @@ layout(location = 0) in vec3 in_pos;
 #include "shader_includes.glsl"
 #endif//SHADER_INCLUDES_GLSL
 
-float map_value(float v, vec2 in_range, vec2 out_range)
-{
-    float slope = 1.0 * (out_range.y - out_range.x) / (in_range.y - in_range.x);
-    return out_range.x + slope * (v - in_range.x);
-}
-
 void main() {
     vec3 p = in_pos+vec3(ants[gl_InstanceID].xy, 0.0);
     p.xy /= map_size.zw;

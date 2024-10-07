@@ -15,6 +15,8 @@
 
 #define SIZE_ELEM 2
 
+#define INTERNAL_TEXTURE_FORMAT GL_RGBA32F
+
 typedef struct
 {
     GLuint VBO;
@@ -213,9 +215,9 @@ int backend_init (void)
         LOG (LOG_INFO, " - %s\n", state.compute_shader_pipeline[i].name);
     }
     glBindImageTexture (
-        2, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+        2, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, INTERNAL_TEXTURE_FORMAT);
     glBindImageTexture (
-        3, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+        3, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, INTERNAL_TEXTURE_FORMAT);
     state.active_framebuffer = state.map_b_framebuffer;
     state.current_map_is_a = true;
     for (int i = 0; i < NUM_ANTS; i++)
@@ -281,7 +283,7 @@ GLFWwindow *init_glfw (void)
 
 void draw (void)
 {
-    glClearColor (1.0f, 0.0f, 0.0f, 1.0f);
+    glClearColor (0.0f, 1.0f, 1.0f, 1.0f);
     glClear (GL_COLOR_BUFFER_BIT);
 
     glBindBuffer (GL_UNIFORM_BUFFER, state.uniforms_buffer_object.ubo);
@@ -382,17 +384,17 @@ bool swap_textures (const bool current_map_is_a)
     if (current_map_is_a)
     {
         glBindImageTexture (
-            2, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+            2, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, INTERNAL_TEXTURE_FORMAT);
         glBindImageTexture (
-            3, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+            3, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, INTERNAL_TEXTURE_FORMAT);
         state.active_framebuffer = state.map_a_framebuffer;
     }
     else
     {
         glBindImageTexture (
-            2, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+            2, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, INTERNAL_TEXTURE_FORMAT);
         glBindImageTexture (
-            3, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+            3, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, INTERNAL_TEXTURE_FORMAT);
         state.active_framebuffer = state.map_b_framebuffer;
     }
     return !current_map_is_a;
@@ -412,14 +414,14 @@ GLuint create_texture_2d ()
     GLuint texture;
     glGenTextures (1, &texture);
     glBindTexture (GL_TEXTURE_2D, texture);
-    GLfloat *tmp_map = calloc (MAP_WIDTH * MAP_HEIGHT, 3 * sizeof (GLfloat));
+    GLfloat *tmp_map = calloc (MAP_WIDTH * MAP_HEIGHT, sizeof (GLfloat));
     glTexImage2D (GL_TEXTURE_2D,
         0,
-        GL_R32F,
+        INTERNAL_TEXTURE_FORMAT,
         MAP_WIDTH,
         MAP_HEIGHT,
         0,
-        GL_RGB,
+        GL_RED,
         GL_FLOAT,
         tmp_map);
     glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);

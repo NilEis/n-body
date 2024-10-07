@@ -6,7 +6,7 @@
 #define MAP_WIDTH (1920 / 2)
 #define MAP_HEIGHT (1080 / 2)
 #define NUM_UNIFORMS 3
-#define NUM_ANTS 500
+#define NUM_ANTS 2000
 #define NUM_COMP_SHADERS 2
 
 #define SIZE_UNIFORM_INDEX 0

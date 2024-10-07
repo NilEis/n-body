@@ -13,18 +13,30 @@
 #include "shader_includes.glsl"
 #endif//SHADER_INCLUDES_GLSL
 
+#define RES 8
+#define CIRCLE_SIZE 0.002
+
 layout (points) in;
-layout (triangle_strip, max_vertices = 3) out;
+layout (triangle_strip, max_vertices = RES*2+2) out;
+
+out vec3 fColor;
+
+const float PI = 3.1415926;
 
 void main() {
-    gl_Position = gl_in[0].gl_Position + vec4(-0.01, 0.0, 0.0, 0.0);
-    EmitVertex();
+    for (int i = 0; i <= RES; i++) {
+        // Angle between each side in radians
+        float ang = PI * 2.0 / float(RES) * i;
 
-    gl_Position = gl_in[0].gl_Position + vec4(0.01, 0.0, 0.0, 0.0);
-    EmitVertex();
-
-    gl_Position = gl_in[0].gl_Position + vec4(0, 0.01, 0.0, 0.0);
-    EmitVertex();
+        // Offset from center of point (0.3 to accomodate for aspect ratio)
+        vec4 offset = vec4(cos(ang) * CIRCLE_SIZE, -sin(ang) * CIRCLE_SIZE, 0.0, 0.0);
+        gl_Position = gl_in[0].gl_Position + offset;
+        fColor=vec3(length(offset));
+        EmitVertex();
+        gl_Position = gl_in[0].gl_Position;
+        fColor=vec3(1.0);
+        EmitVertex();
+    }
 
     EndPrimitive();
 }

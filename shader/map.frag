@@ -6,6 +6,8 @@
 #endif
 layout(location = 0) out vec4 FragColor;
 
+in vec3 fColor;
+
 #ifndef DEFINES_H
 #include "../include/defines.h"
 #endif//DEFINES_H
@@ -15,5 +17,12 @@ layout(location = 0) out vec4 FragColor;
 #endif//SHADER_INCLUDES_GLSL
 
 void main() {
-    FragColor = vec4(1.0);
+    if (fColor.r>0.5)
+    {
+        FragColor = vec4(1.0);
+    }
+    else
+    {
+        FragColor = vec4(0.0);
+    }
 }

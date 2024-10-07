@@ -6,6 +6,7 @@ static struct
     double last_frame;
 } delta_time = { 0 };
 
+extern void crash(void);
 int main ()
 {
     if (backend_init () == -1)
