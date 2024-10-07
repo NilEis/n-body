@@ -27,6 +27,12 @@ layout(std430, binding = 1) buffer ant_buffer {
     vec2 ants[];
 };
 
+float map_value(float v, vec2 in_range, vec2 out_range)
+{
+    float slope = 1.0 * (out_range.y - out_range.x) / (in_range.y - in_range.x);
+    return out_range.x + slope * (v - in_range.x);
+}
+
 void main() {
     vec3 p = in_pos+vec3(ants[gl_InstanceID].xy, 0.0);
     p.xy /= vec2(MAP_WIDTH, MAP_HEIGHT);
