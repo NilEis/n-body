@@ -13,7 +13,7 @@
 #include "shader_includes.glsl"
 #endif//SHADER_INCLUDES_GLSL
 
-const float S = 0.01;
+const float S = 0.005;
 
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
