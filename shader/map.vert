@@ -16,7 +16,7 @@ layout(location = 0) in vec3 in_pos;
 #endif//SHADER_INCLUDES_GLSL
 
 void main() {
-    vec3 p = in_pos+vec3(ants[gl_InstanceID].xy, 0.0);
+    vec3 p = in_pos + vec3(ants[gl_InstanceID].xy, 0.0);
     p.xy /= map_size.zw;
     p.xy -= 0.5;
     gl_Position = vec4(p, 1.0);

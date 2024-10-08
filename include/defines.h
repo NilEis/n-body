@@ -1,10 +1,10 @@
 #ifndef DEFINES_H
 #define DEFINES_H
 
-#define WINDOW_WIDTH 1920
-#define WINDOW_HEIGHT 1080
-#define MAP_WIDTH (1920 / 2)
-#define MAP_HEIGHT (1080 / 2)
+#define WINDOW_WIDTH 1200
+#define WINDOW_HEIGHT 800
+#define MAP_WIDTH (WINDOW_WIDTH / 1)
+#define MAP_HEIGHT (WINDOW_HEIGHT / 1)
 #define NUM_UNIFORMS 3
 #define NUM_ANTS 2000
 #define NUM_COMP_SHADERS 2

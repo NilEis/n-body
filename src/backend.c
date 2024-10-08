@@ -161,6 +161,7 @@ int backend_init (void)
     }
     state.size[0] = (GLfloat)WINDOW_WIDTH;
     state.size[1] = (GLfloat)WINDOW_HEIGHT;
+    glViewport (0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
     state.map_size[0] = (GLfloat)0;
     state.map_size[1] = (GLfloat)0;
     state.map_size[2] = (GLfloat)MAP_WIDTH;
@@ -179,12 +180,12 @@ int backend_init (void)
         for (int i = 0; i < SIZE_ELEM * NUM_ANTS; i += SIZE_ELEM)
         {
             const GLfloat r = (GLfloat)rand ();
-            GLfloat d = (GLfloat)(rand () % (MAP_HEIGHT / 4));
+            GLfloat d = (GLfloat)(rand () % (MAP_HEIGHT / 2));
             d = d == 0 ? 1 : d;
             const GLfloat x = cosf (r);
             const GLfloat y = sinf (r);
-            state.ants_pos[i + 0] = x * d;
-            state.ants_pos[i + 1] = y * d;
+            state.ants_pos[i + 0] = MAP_WIDTH / 2 + x * d;
+            state.ants_pos[i + 1] = MAP_HEIGHT / 2 + y * d;
         }
     }
     state.ssbo = create_ssbo (
@@ -214,10 +215,20 @@ int backend_init (void)
     {
         LOG (LOG_INFO, " - %s\n", state.compute_shader_pipeline[i].name);
     }
-    glBindImageTexture (
-        2, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, INTERNAL_TEXTURE_FORMAT);
-    glBindImageTexture (
-        3, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, INTERNAL_TEXTURE_FORMAT);
+    glBindImageTexture (2,
+        state.map_a,
+        0,
+        GL_FALSE,
+        0,
+        GL_READ_WRITE,
+        INTERNAL_TEXTURE_FORMAT);
+    glBindImageTexture (3,
+        state.map_b,
+        0,
+        GL_FALSE,
+        0,
+        GL_READ_WRITE,
+        INTERNAL_TEXTURE_FORMAT);
     state.active_framebuffer = state.map_b_framebuffer;
     state.current_map_is_a = true;
     for (int i = 0; i < NUM_ANTS; i++)
@@ -305,8 +316,9 @@ void draw (void)
         0,
         SIZE_ELEM * NUM_ANTS * sizeof (GLfloat),
         state.ants_pos);
-    glBindVertexArray (state.point_vx_data.VAO);
     glBindFramebuffer (GL_FRAMEBUFFER, state.active_framebuffer);
+    glBindVertexArray (state.point_vx_data.VAO);
+    glViewport (0, 0, MAP_WIDTH, MAP_HEIGHT);
     glUseProgram (state.shader_map);
     glDrawArraysInstanced (GL_POINTS, 0, 1, NUM_ANTS);
     state.current_map_is_a = swap_textures (state.current_map_is_a);
@@ -326,6 +338,7 @@ void draw (void)
     }
     glBindFramebuffer (GL_FRAMEBUFFER, 0);
     glBindVertexArray (state.vertex_data.VAO);
+    glViewport (0, 0, state.size[0], state.size[1]);
     glUseProgram (state.shader);
     glDrawArrays (GL_TRIANGLES, 0, 3);
     state.current_map_is_a = swap_textures (state.current_map_is_a);
@@ -383,18 +396,38 @@ bool swap_textures (const bool current_map_is_a)
 {
     if (current_map_is_a)
     {
-        glBindImageTexture (
-            2, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, INTERNAL_TEXTURE_FORMAT);
-        glBindImageTexture (
-            3, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, INTERNAL_TEXTURE_FORMAT);
+        glBindImageTexture (2,
+            state.map_b,
+            0,
+            GL_FALSE,
+            0,
+            GL_READ_WRITE,
+            INTERNAL_TEXTURE_FORMAT);
+        glBindImageTexture (3,
+            state.map_a,
+            0,
+            GL_FALSE,
+            0,
+            GL_READ_WRITE,
+            INTERNAL_TEXTURE_FORMAT);
         state.active_framebuffer = state.map_a_framebuffer;
     }
     else
     {
-        glBindImageTexture (
-            2, state.map_a, 0, GL_FALSE, 0, GL_READ_WRITE, INTERNAL_TEXTURE_FORMAT);
-        glBindImageTexture (
-            3, state.map_b, 0, GL_FALSE, 0, GL_READ_WRITE, INTERNAL_TEXTURE_FORMAT);
+        glBindImageTexture (2,
+            state.map_a,
+            0,
+            GL_FALSE,
+            0,
+            GL_READ_WRITE,
+            INTERNAL_TEXTURE_FORMAT);
+        glBindImageTexture (3,
+            state.map_b,
+            0,
+            GL_FALSE,
+            0,
+            GL_READ_WRITE,
+            INTERNAL_TEXTURE_FORMAT);
         state.active_framebuffer = state.map_b_framebuffer;
     }
     return !current_map_is_a;
@@ -504,6 +537,7 @@ void framebuffer_size_callback (
     // displays.
     state.size[0] = (GLfloat)width;
     state.size[1] = (GLfloat)height;
+    glViewport (0, 0, width, height);
     memcpy (
         state.uniforms_buffer_object.mem, state.size, 2 * sizeof (GLfloat));
 }
