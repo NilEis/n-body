@@ -1,6 +1,11 @@
 ﻿#ifndef BH_TREE_H
 #define BH_TREE_H
+#include "defines.h"
 #include "quad.h"
+
+#include <math.h>
+
+#include "arena.h"
 
 typedef struct
 {
@@ -31,12 +36,35 @@ typedef struct bh_tree
     struct bh_tree *NE;
     struct bh_tree *SW;
     struct bh_tree *SE;
+    Arena *arena;
 } bh_tree;
 
-void bh_tree_init (bh_tree *tree, quad *q);
+void bh_tree_init (bh_tree *tree, const quad *q, Arena *arena);
 bool bh_tree_is_leaf (const bh_tree *tree);
 void bh_tree_insert (bh_tree *restrict tree, const ant *restrict v);
+void bh_tree_apply_force (const bh_tree *restrict tree, ant *restrict v);
 
-void
+static void apply_force (
+    ant *a, const GLfloat x, const GLfloat y, const double w)
+{
+    const double dx = x - *a->x;
+    const double dy = y - *a->y;
+    double dist = sqrt (dx * dx + dy * dy);
+    if (dist < EPSILON)
+    {
+        dist = EPSILON;
+    }
+    const double F = GRAVITATIONAL_CONSTANT * a->w * w / (dist * dist);
+    a->fx += F * dx / dist;
+    a->fy += F * dy / dist;
+}
+static void update_ant (ant *v)
+{
+    const double i_w = v->w;
+    v->vx += v->fx / i_w;
+    v->vy += v->fy / i_w;
+    *v->x += (GLfloat)v->vx;
+    *v->y += (GLfloat)v->vy;
+}
 
 #endif // BH_TREE_H

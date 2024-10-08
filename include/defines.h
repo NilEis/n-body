@@ -1,7 +1,7 @@
 #ifndef DEFINES_H
 #define DEFINES_H
 
-#define WINDOW_WIDTH 1200
+#define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 800
 #define MAP_WIDTH (WINDOW_WIDTH / 1)
 #define MAP_HEIGHT (WINDOW_HEIGHT / 1)
@@ -15,5 +15,7 @@
 
 #define GRAVITATIONAL_CONSTANT 6.67E-11
 #define EPSILON 1E4
+
+#define MACRO_SQUARED_DIST(a, b) ((a) * (a) + (b) * (b))
 
 #endif // DEFINES_H

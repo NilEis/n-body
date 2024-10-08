@@ -25,6 +25,7 @@ typedef struct
 
 typedef struct
 {
+    Arena arena;
     GLFWwindow *window;
     char window_name[28];
     GLuint shader;
@@ -339,42 +340,55 @@ void draw (void)
 
 void update (void)
 {
+#if 0
     for (int i = 0; i < NUM_ANTS; i++)
     {
         state.ants[i].fx = 0;
         state.ants[i].fy = 0;
-    }
-    for (int i = 0; i < NUM_ANTS; i++)
-    {
-        const double i_w = state.ants[i].w;
-        for (int j = i + 1; j < NUM_ANTS; j++)
+        for (int j = 0; j < NUM_ANTS; j++)
         {
-            const double dx = *state.ants[j].x - *state.ants[i].x;
-            const double dy = *state.ants[j].y - *state.ants[i].y;
-            const double j_w = state.ants[j].w;
-            double dist = sqrt (dx * dx + dy * dy);
-            if (dist < EPSILON)
+            if (i == j)
             {
-                dist = EPSILON;
+                continue;
             }
-            const double F
-                = GRAVITATIONAL_CONSTANT * i_w * j_w / (dist * dist);
-            const double force_x = F * dx / dist;
-            state.ants[i].fx += force_x;
-            const double force_y = F * dy / dist;
-            state.ants[i].fy += force_y;
-            state.ants[j].fx -= force_x;
-            state.ants[j].fy -= force_y;
+            const ant *b = &state.ants[j];
+            apply_force (&state.ants[i], *b->x, *b->y, b->w);
         }
     }
     for (auto i = 0; i < NUM_ANTS; i++)
     {
-        const double i_w = state.ants[i].w;
-        state.ants[i].vx += state.ants[i].fx / i_w;
-        state.ants[i].vy += state.ants[i].fy / i_w;
-        *state.ants[i].x += (GLfloat)state.ants[i].vx;
-        *state.ants[i].y += (GLfloat)state.ants[i].vy;
+        ant *v = &state.ants[i];
+        update_ant (v);
     }
+#else
+    arena_reset (&state.arena);
+    bh_tree *tree = arena_alloc (&state.arena, sizeof (bh_tree));
+    bh_tree_init (tree,
+        &(quad){
+            .x = MAP_WIDTH / 2.0f,
+            .y = MAP_HEIGHT / 2.0f,
+            .length = { .full = MAP_WIDTH, .half = MAP_WIDTH / 2.0f }
+    },
+        &state.arena);
+    for (int i = 0; i < NUM_ANTS; i++)
+    {
+        if (quad_contains (&tree->quad, *state.ants[i].x, *state.ants[i].y))
+        {
+            bh_tree_insert (tree, &state.ants[i]);
+        }
+    }
+    for (int i = 0; i < NUM_ANTS; i++)
+    {
+        state.ants[i].fx = 0;
+        state.ants[i].fy = 0;
+        if (quad_contains (&tree->quad, *state.ants[i].x, *state.ants[i].y))
+        {
+            bh_tree_apply_force (tree, &state.ants[i]);
+        }
+        update_ant (&state.ants[i]);
+    }
+    arena_free (&state.arena);
+#endif
 }
 
 GLFWwindow *backend_get_window (void) { return state.window; }

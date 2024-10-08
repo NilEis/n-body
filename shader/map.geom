@@ -14,7 +14,7 @@
 #endif//SHADER_INCLUDES_GLSL
 
 #define RES 8
-#define CIRCLE_SIZE 0.001
+#define CIRCLE_SIZE 0.005
 
 layout (points) in;
 layout (triangle_strip, max_vertices = RES*2+2) out;

@@ -21,6 +21,15 @@ cpmaddpackage(
         glad2
         DOWNLOAD_ONLY
         YES)
+cpmaddpackage(
+        NAME
+        arena
+        GITHUB_REPOSITORY
+        tsoding/arena
+        GIT_TAG
+        c2d1c1ce4360d13d5fb94201bfb72cc34a22fa69
+        DOWNLOAD_ONLY
+        YES)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake)
 
@@ -49,7 +58,10 @@ file(GLOB HEADER_FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h ${CMAKE_CURRENT_B
 
 target_precompile_headers(n-body PRIVATE ${HEADER_FILES})
 
-target_include_directories(n-body PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/ ${CMAKE_CURRENT_BINARY_DIR}/generated/include/)
+target_include_directories(n-body PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/
+        ${CMAKE_CURRENT_BINARY_DIR}/generated/include/
+        ${arena_SOURCE_DIR}/)
 
 target_link_libraries(n-body glfw glad_gl_core_45)
 
