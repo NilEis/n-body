@@ -66,18 +66,7 @@ typedef struct
         char *names[NUM_UNIFORMS];
     } uniforms_buffer_object;
     GLfloat ants_pos[SIZE_ELEM * NUM_ANTS];
-    struct
-    {
-        GLfloat *x;
-        GLfloat *y;
-        double vx;
-        double vy;
-        double fx;
-        double fy;
-        double w;
-        double kin;
-        double pot;
-    } ants[NUM_ANTS];
+    ant ants[NUM_ANTS];
 } state_t;
 
 static void error_callback (int error, const char *description);

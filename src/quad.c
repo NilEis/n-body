@@ -35,3 +35,12 @@ void quad_subdivide (
         break;
     }
 }
+
+quad_quadrant quad_get_quadrant (const quad *restrict q, float x, float y)
+{
+    if (x < q->x)
+    {
+        return y >= q->y ? NW : SW;
+    }
+    return y < q->y ? SE : NE;
+}
