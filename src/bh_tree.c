@@ -46,6 +46,37 @@ bool bh_tree_is_leaf (const bh_tree *tree)
         && tree->SW == nullptr;
 }
 
+static bh_tree *bh_tree_split (bh_tree *tree, float x, float y)
+{
+    bh_tree **quad_tree = nullptr;
+    quad_quadrant quadrant = NW;
+    switch (quad_get_quadrant (&tree->quad, x, y))
+    {
+    case NW:
+        quadrant = NW;
+        quad_tree = &tree->NW;
+        break;
+    case NE:
+        quadrant = NE;
+        quad_tree = &tree->NE;
+        break;
+    case SW:
+        quadrant = SW;
+        quad_tree = &tree->SW;
+        break;
+    case SE:
+        quadrant = SE;
+        quad_tree = &tree->SE;
+        break;
+    }
+    if (*quad_tree == nullptr)
+    {
+        *quad_tree = arena_alloc (tree->arena, sizeof (bh_tree));
+        bh_tree_init (*quad_tree, nullptr, tree->arena);
+        quad_subdivide (&tree->quad, quadrant, &(*quad_tree)->quad);
+    }
+    return *quad_tree;
+}
 void bh_tree_insert (bh_tree *restrict tree, const ant *restrict v)
 {
     if (!tree->node_body.active)
@@ -58,56 +89,14 @@ void bh_tree_insert (bh_tree *restrict tree, const ant *restrict v)
     else if (!bh_tree_is_leaf (tree))
     {
         bh_tree_add_body (tree, v);
-        bh_tree **quad_tree = nullptr;
-        switch (quad_get_quadrant (&tree->quad, *v->x, *v->y))
-        {
-        case NW:
-            quad_tree = &tree->NW;
-            break;
-        case NE:
-            quad_tree = &tree->NE;
-            break;
-        case SW:
-            quad_tree = &tree->SW;
-            break;
-        case SE:
-            quad_tree = &tree->SE;
-            break;
-        }
-        if (*quad_tree == nullptr)
-        {
-            *quad_tree = arena_alloc (tree->arena, sizeof (bh_tree));
-            bh_tree_init (*quad_tree, nullptr, tree->arena);
-            quad_subdivide (&tree->quad, NW, &(*quad_tree)->quad);
-        }
-        bh_tree_insert (*quad_tree, v);
+        bh_tree *sub_tree = bh_tree_split (tree, *v->x, *v->y);
+        bh_tree_insert (sub_tree, v);
     }
     else
     {
-        bh_tree **quad_tree = nullptr;
-        switch (quad_get_quadrant (
-            &tree->quad, tree->node_body.x, tree->node_body.y))
-        {
-        case NW:
-            quad_tree = &tree->NW;
-            break;
-        case NE:
-            quad_tree = &tree->NE;
-            break;
-        case SW:
-            quad_tree = &tree->SW;
-            break;
-        case SE:
-            quad_tree = &tree->SE;
-            break;
-        }
-        if (*quad_tree == nullptr)
-        {
-            *quad_tree = arena_alloc (tree->arena, sizeof (bh_tree));
-            bh_tree_init (*quad_tree, nullptr, tree->arena);
-            quad_subdivide (&tree->quad, NW, &(*quad_tree)->quad);
-        }
-        bh_tree_insert_body (*quad_tree, &tree->node_body);
+        bh_tree *sub_tree
+            = bh_tree_split (tree, tree->node_body.x, tree->node_body.y);
+        bh_tree_insert_body (sub_tree, &tree->node_body);
         bh_tree_insert (tree, v);
     }
 }

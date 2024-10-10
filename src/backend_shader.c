@@ -131,6 +131,7 @@ GLuint create_shader_program (
     const int num_shaders, shader_source shader_srcs[])
 {
     GLuint *shaders = calloc (num_shaders, sizeof (GLuint));
+    GLuint program = 0;
     assert (shaders != nullptr);
     for (int i = 0; i < num_shaders; i++)
     {
@@ -144,7 +145,7 @@ GLuint create_shader_program (
             goto end;
         }
     }
-    const GLuint program = link_shader_program (num_shaders, shaders);
+    program = link_shader_program (num_shaders, shaders);
 end:
     free (shaders);
     return program;

@@ -16,8 +16,6 @@ typedef struct
     double fx;
     double fy;
     double w;
-    double kin;
-    double pot;
 } ant;
 
 typedef struct

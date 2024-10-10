@@ -115,20 +115,24 @@ int backend_init (void)
             { .type = GL_FRAGMENT_SHADER, .src = shader_main_frag },
             { .type = GL_VERTEX_SHADER,   .src = shader_main_vert }
     });
+    assert (state.shader != 0);
     state.comp_shader_sub = create_shader_program (1,
         (shader_source[]){
             { .type = GL_COMPUTE_SHADER, .src = shader_sub_comp }
     });
+    assert (state.comp_shader_sub != 0);
     state.comp_shader_blur = create_shader_program (1,
         (shader_source[]){
             { .type = GL_COMPUTE_SHADER, .src = shader_blur_comp }
     });
+    assert (state.comp_shader_blur != 0);
     state.shader_map = create_shader_program (3,
         (shader_source[]){
             { .type = GL_VERTEX_SHADER,   .src = shader_map_vert },
             { .type = GL_GEOMETRY_SHADER, .src = shader_map_geom },
             { .type = GL_FRAGMENT_SHADER, .src = shader_map_frag }
     });
+    assert (state.shader_map != 0);
     {
         static constexpr float vertices[] = {
             -1.0f,
@@ -166,6 +170,7 @@ int backend_init (void)
     state.map_b_framebuffer = create_framebuffer (state.map_b);
     {
         LOG (LOG_INFO, "Generating particles\n");
+        srand (0);
         memset (state.ants_pos, 0, sizeof (state.ants_pos));
         for (int i = 0; i < SIZE_ELEM * NUM_ANTS; i += SIZE_ELEM)
         {
@@ -230,26 +235,15 @@ int backend_init (void)
         state.ants[i].fx = 0;
         state.ants[i].fy = 0;
         state.ants[i].w = 2.0E14;
-        state.ants[i].kin = 0;
-        state.ants[i].pot = 0;
     }
-    state.ants[0].w = 2.0E12;
+    state.ants[0].w = 2.0E18;
     state.ants[0].vx = 0;
     state.ants[0].vy = 0;
-    {
-        GLfloat max_wheight = 0.0f;
-        for (int i = 0; i < NUM_ANTS; i++)
-        {
-            if (max_wheight < state.ants[i].w)
-            {
-                max_wheight = (GLfloat)state.ants[i].w;
-            }
-        }
-        glBufferSubData (GL_UNIFORM_BUFFER,
-            0,
-            state.uniforms_buffer_object.block_size,
-            state.uniforms_buffer_object.mem);
-    }
+    glBufferSubData (GL_UNIFORM_BUFFER,
+        0,
+        state.uniforms_buffer_object.block_size,
+        state.uniforms_buffer_object.mem);
+
     state.time = 0;
     LOG (LOG_INFO, "finished init\n");
     return 0;
@@ -362,8 +356,8 @@ void update (void)
     }
 #else
     arena_reset (&state.arena);
-    bh_tree *tree = arena_alloc (&state.arena, sizeof (bh_tree));
-    bh_tree_init (tree,
+    bh_tree tree;
+    bh_tree_init (&tree,
         &(quad){
             .x = MAP_WIDTH / 2.0f,
             .y = MAP_HEIGHT / 2.0f,
@@ -372,18 +366,18 @@ void update (void)
         &state.arena);
     for (int i = 0; i < NUM_ANTS; i++)
     {
-        if (quad_contains (&tree->quad, *state.ants[i].x, *state.ants[i].y))
+        if (quad_contains (&tree.quad, *state.ants[i].x, *state.ants[i].y))
         {
-            bh_tree_insert (tree, &state.ants[i]);
+            bh_tree_insert (&tree, &state.ants[i]);
         }
     }
     for (int i = 0; i < NUM_ANTS; i++)
     {
         state.ants[i].fx = 0;
         state.ants[i].fy = 0;
-        if (quad_contains (&tree->quad, *state.ants[i].x, *state.ants[i].y))
+        if (quad_contains (&tree.quad, *state.ants[i].x, *state.ants[i].y))
         {
-            bh_tree_apply_force (tree, &state.ants[i]);
+            bh_tree_apply_force (&tree, &state.ants[i]);
         }
         update_ant (&state.ants[i]);
     }

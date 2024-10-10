@@ -16,7 +16,7 @@ int main ()
     GLFWwindow *window = backend_get_window ();
     while (!glfwWindowShouldClose (window))
     {
-        //draw ();
+        draw ();
         for(int i = 0; i < 1; i++)
         {
             update ();

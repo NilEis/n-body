@@ -19,19 +19,19 @@ void quad_subdivide (
     {
     case NW:
         out->x = q->x - q->length.full / 4.0f;
-        out->x = q->y + q->length.full / 4.0f;
+        out->y = q->y + q->length.full / 4.0f;
         break;
     case NE:
         out->x = q->x + q->length.full / 4.0f;
-        out->x = q->y + q->length.full / 4.0f;
+        out->y = q->y + q->length.full / 4.0f;
         break;
     case SW:
         out->x = q->x - q->length.full / 4.0f;
-        out->x = q->y - q->length.full / 4.0f;
+        out->y = q->y - q->length.full / 4.0f;
         break;
     case SE:
         out->x = q->x + q->length.full / 4.0f;
-        out->x = q->y - q->length.full / 4.0f;
+        out->y = q->y - q->length.full / 4.0f;
         break;
     }
 }
@@ -40,7 +40,7 @@ quad_quadrant quad_get_quadrant (const quad *restrict q, float x, float y)
 {
     if (x < q->x)
     {
-        return y >= q->y ? NW : SW;
+        return y < q->y ? SW : NW;
     }
     return y < q->y ? SE : NE;
 }
