@@ -6,6 +6,7 @@
 #include "shader.h"
 
 #include <assert.h>
+#include <float.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -26,6 +27,7 @@ typedef struct
 typedef struct
 {
     Arena arena;
+    quad main_quad;
     GLFWwindow *window;
     char window_name[28];
     GLuint shader;
@@ -170,7 +172,7 @@ int backend_init (void)
             (const float (*)[]) & vertices, sizeof (vertices), 3);
     }
     {
-        static constexpr float vertices[] = { 0.5f, 0.5f, 1.0f };
+        static constexpr float vertices[] = { 0.0f, 0.0f, 1.0f };
         state.point_vx_data = init_vertex_data (
             (const float (*)[]) & vertices, sizeof (vertices), 1);
     }
@@ -193,6 +195,11 @@ int backend_init (void)
         LOG (LOG_INFO, "Generating particles\n");
         srand (0);
         memset (state.ants_pos, 0, sizeof (state.ants_pos));
+
+        quad_member_type minx = DBL_MAX;
+        quad_member_type miny = DBL_MAX;
+        quad_member_type maxx = DBL_MIN;
+        quad_member_type maxy = DBL_MIN;
         for (int i = 0; i < SIZE_ELEM * NUM_ANTS; i += SIZE_ELEM)
         {
             const GLfloat r = (GLfloat)rand ();
@@ -200,9 +207,33 @@ int backend_init (void)
             d = d == 0 ? 1 : d;
             const GLfloat x = cosf (r);
             const GLfloat y = sinf (r);
-            state.ants_pos[i + 0] = MAP_WIDTH / 2 + x * d;
-            state.ants_pos[i + 1] = MAP_HEIGHT / 2 + y * d;
+            GLfloat x_pos = MAP_WIDTH / 2 + x * d;
+            GLfloat y_pos = MAP_HEIGHT / 2 + y * d;
+            state.ants_pos[i + 0] = x_pos;
+            state.ants_pos[i + 1] = y_pos;
+            if (x_pos < minx)
+            {
+                minx = x_pos;
+            }
+            else if (x_pos > maxx)
+            {
+                maxx = x_pos;
+            }
+            if (y_pos < miny)
+            {
+                miny = y_pos;
+            }
+            else if (y_pos > maxy)
+            {
+                maxy = y_pos;
+            }
         }
+        state.main_quad.width.full = maxx - minx;
+        state.main_quad.width.half = state.main_quad.width.full / 2.0f;
+        state.main_quad.height.full = maxy - miny;
+        state.main_quad.height.half = state.main_quad.height.full / 2.0f;
+        state.main_quad.x = minx + state.main_quad.width.half;
+        state.main_quad.y = miny + state.main_quad.height.half;
     }
     state.ssbo = create_ssbo (
         state.ants_pos, sizeof (state.ants_pos), GL_DYNAMIC_STORAGE_BIT);
@@ -383,26 +414,58 @@ void update (void)
 #else
     arena_reset (&state.arena);
     bh_tree tree;
-    auto q = (quad){ .x = 0.0f, .y = 0.0f, .length = { .full = 1000000 } };
-    q.length.half = q.length.full / 2.0f;
-    bh_tree_init (&tree, &q, &state.arena);
+    bh_tree_init (&tree, &state.main_quad, &state.arena);
+    int max_d = 0;
     for (int i = 0; i < NUM_ANTS; i++)
     {
         if (quad_contains (&tree.quad, *state.ants[i].x, *state.ants[i].y))
         {
-            bh_tree_insert (&tree, &state.ants[i]);
+            const int d = bh_tree_insert (&tree, &state.ants[i], 0);
+            max_d = max_d < d ? d : max_d;
         }
     }
+    LOG (LOG_INFO, "Max insert depth = %d\n", max_d);
+    quad_member_type minx = DBL_MAX;
+    quad_member_type miny = DBL_MAX;
+    quad_member_type maxx = DBL_MIN;
+    quad_member_type maxy = DBL_MIN;
+    max_d = 0;
     for (int i = 0; i < NUM_ANTS; i++)
     {
         state.ants[i].fx = 0;
         state.ants[i].fy = 0;
         if (quad_contains (&tree.quad, *state.ants[i].x, *state.ants[i].y))
         {
-            bh_tree_apply_force (&tree, &state.ants[i]);
+            const int d = bh_tree_apply_force (&tree, &state.ants[i], 0);
+            max_d = max_d < d ? d : max_d;
         }
         update_ant (&state.ants[i]);
+        const quad_member_type x_pos = *state.ants[i].x;
+        const quad_member_type y_pos = *state.ants[i].y;
+        if (x_pos < minx)
+        {
+            minx = x_pos;
+        }
+        else if (x_pos > maxx)
+        {
+            maxx = x_pos;
+        }
+        if (y_pos < miny)
+        {
+            miny = y_pos;
+        }
+        else if (y_pos > maxy)
+        {
+            maxy = y_pos;
+        }
     }
+    LOG (LOG_INFO, "Max apply force depth = %d\n", max_d);
+    state.main_quad.width.full = maxx - minx;
+    state.main_quad.width.half = state.main_quad.width.full / 2.0f;
+    state.main_quad.height.full = maxy - miny;
+    state.main_quad.height.half = state.main_quad.height.full / 2.0f;
+    state.main_quad.x = minx + state.main_quad.width.half;
+    state.main_quad.y = miny + state.main_quad.height.half;
     arena_free (&state.arena);
 #endif
 }

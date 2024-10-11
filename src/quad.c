@@ -2,8 +2,8 @@
 
 bool quad_contains (const quad *q, const float x, const float y)
 {
-    if (x <= q->x + q->length.half && x >= q->x - q->length.half
-        && y <= q->y + q->length.half && y >= q->y - q->length.half)
+    if (x <= q->x + q->width.half && x >= q->x - q->width.half
+        && y <= q->y + q->height.half && y >= q->y - q->height.half)
     {
         return true;
     }
@@ -13,25 +13,27 @@ bool quad_contains (const quad *q, const float x, const float y)
 void quad_subdivide (
     const quad *restrict q, const quad_quadrant quadrant, quad *restrict out)
 {
-    out->length.full = q->length.half;
-    out->length.half = out->length.full / 2.0f;
+    out->width.full = q->width.half;
+    out->width.half = out->width.full / 2.0f;
+    out->height.full = q->height.half;
+    out->height.half = out->height.full / 2.0f;
     switch (quadrant)
     {
     case NW:
-        out->x = q->x - q->length.full / 4.0f;
-        out->y = q->y + q->length.full / 4.0f;
+        out->x = q->x - q->width.full / 4.0f;
+        out->y = q->y + q->height.full / 4.0f;
         break;
     case NE:
-        out->x = q->x + q->length.full / 4.0f;
-        out->y = q->y + q->length.full / 4.0f;
+        out->x = q->x + q->width.full / 4.0f;
+        out->y = q->y + q->height.full / 4.0f;
         break;
     case SW:
-        out->x = q->x - q->length.full / 4.0f;
-        out->y = q->y - q->length.full / 4.0f;
+        out->x = q->x - q->width.full / 4.0f;
+        out->y = q->y - q->height.full / 4.0f;
         break;
     case SE:
-        out->x = q->x + q->length.full / 4.0f;
-        out->y = q->y - q->length.full / 4.0f;
+        out->x = q->x + q->width.full / 4.0f;
+        out->y = q->y - q->height.full / 4.0f;
         break;
     }
 }

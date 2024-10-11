@@ -39,8 +39,8 @@ typedef struct bh_tree
 
 void bh_tree_init (bh_tree *tree, const quad *q, Arena *arena);
 bool bh_tree_is_leaf (const bh_tree *tree);
-void bh_tree_insert (bh_tree *restrict tree, const ant *restrict v);
-void bh_tree_apply_force (const bh_tree *restrict tree, ant *restrict v);
+int bh_tree_insert (bh_tree *restrict tree, const ant *restrict v, int d);
+int bh_tree_apply_force (const bh_tree *restrict tree, ant *restrict v, int d);
 
 static void apply_force (
     ant *a, const GLfloat x, const GLfloat y, const double w)
