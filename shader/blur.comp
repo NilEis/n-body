@@ -1,0 +1,34 @@
+#version 450 core
+
+#ifndef DEFINES_H
+#include "../include/defines.h"
+#endif//DEFINES_H
+
+#ifndef SHADER_INCLUDES_GLSL
+#include "shader_includes.glsl"
+#endif//SHADER_INCLUDES_GLSL
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+float lerp(float a, float b, float t)
+{
+    return t * a + (1.0 - t) * b;
+}
+
+void main() {
+    ivec2 index = ivec2(gl_GlobalInvocationID.xy);
+    float v = 0;
+    const float high_w = 0.5;
+    const float small_w = (1.0 - high_w) / 8.0;
+    v += imageLoad(map_in, index + ivec2(-1, -1)).r * small_w;
+    v += imageLoad(map_in, index + ivec2(0, -1)).r * small_w;
+    v += imageLoad(map_in, index + ivec2(1, -1)).r * small_w;
+    v += imageLoad(map_in, index + ivec2(-1, 0)).r * small_w;
+    v += imageLoad(map_in, index + ivec2(0, 0)).r * high_w;
+    v += imageLoad(map_in, index + ivec2(1, 0)).r * small_w;
+    v += imageLoad(map_in, index + ivec2(-1, 1)).r * small_w;
+    v += imageLoad(map_in, index + ivec2(0, 1)).r * small_w;
+    v += imageLoad(map_in, index + ivec2(1, 1)).r * small_w;
+    v = lerp(imageLoad(map_in, index).r, v, 0.25);
+    imageStore(map_out, index, vec4(v));
+}

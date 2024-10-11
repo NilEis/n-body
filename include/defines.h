@@ -1,32 +1,23 @@
-#ifndef GLOBAL_DEFINES_H
-#define GLOBAL_DEFINES_H
+#ifndef DEFINES_H
+#define DEFINES_H
 
-#ifndef P_RANGE
-#define P_RANGE 300.0
-#endif
+#define WINDOW_WIDTH 1920
+#define WINDOW_HEIGHT 1080
+#define MAP_WIDTH (WINDOW_WIDTH / 1)
+#define MAP_HEIGHT (WINDOW_HEIGHT / 1)
+#define NUM_UNIFORMS 3
+#define NUM_ANTS 20000
+#define NUM_COMP_SHADERS 2
 
-#ifndef NUM_THREADS
-#define NUM_THREADS 11
-#endif
+#define SIZE_UNIFORM_INDEX 0
+#define MAP_SIZE_INDEX 1
+#define TIME_UNIFORM_INDEX 2
 
-#ifndef USE_CUDA
-#define USE_CUDA 0
-#endif
+#define UNIVERSE_SIZE 1e8
+#define GRAVITATIONAL_CONSTANT 6.67E-11
+#define EPSILON 1E4
+#define TREE_EPSILON 0.001
 
-#ifndef USE_OPENCL
-#define USE_OPENCL 0
-#endif
+#define MACRO_SQUARED_DIST(a, b) ((a) * (a) + (b) * (b))
 
-#ifndef USE_PTHREAD
-#if !USE_CUDA
-#define USE_PTHREAD 1
-#else
-#define USE_PTHREAD 0
-#endif
-#endif
-
-#ifndef TIME_STEPS
-#define TIME_STEPS 10
-#endif
-
-#endif // GLOBAL_DEFINES_H
+#endif // DEFINES_H
