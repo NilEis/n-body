@@ -1,9 +1,7 @@
-#version 450
+#version 450 core
 
-#extension GL_GOOGLE_cpp_style_line_directive : enable
-#ifdef GL_GOOGLE_cpp_style_line_directive
 #line 2 "map.frag"
-#endif
+
 layout(location = 0) out vec4 FragColor;
 
 in vec3 fColor;

@@ -93,6 +93,14 @@ GLuint create_texture_2d ();
 GLuint create_framebuffer (GLuint texture);
 GLuint create_ssbo (const void *p, GLsizeiptr size, int flags);
 
+APIENTRY void opengl_error_callback (GLenum source,
+    GLenum type,
+    GLuint id,
+    GLenum severity,
+    GLsizei length,
+    const GLchar *message,
+    const void *user_param);
+
 int backend_init (void)
 {
     state.window = init_glfw ();
@@ -108,6 +116,7 @@ int backend_init (void)
     }
     LOG (LOG_INFO, "Init GLAD\n");
     gladLoadGL (glfwGetProcAddress);
+    glDebugMessageCallback (opengl_error_callback, nullptr);
     LOG (LOG_INFO, "Load shaders\n");
     state.render_passes_n = 1;
     state.shader = create_shader_program (2,
@@ -115,24 +124,36 @@ int backend_init (void)
             { .type = GL_FRAGMENT_SHADER, .src = shader_main_frag },
             { .type = GL_VERTEX_SHADER,   .src = shader_main_vert }
     });
-    assert (state.shader != 0);
+    if (state.shader == 0)
+    {
+        return -1;
+    }
     state.comp_shader_sub = create_shader_program (1,
         (shader_source[]){
             { .type = GL_COMPUTE_SHADER, .src = shader_sub_comp }
     });
-    assert (state.comp_shader_sub != 0);
+    if (state.comp_shader_sub == 0)
+    {
+        return -1;
+    }
     state.comp_shader_blur = create_shader_program (1,
         (shader_source[]){
             { .type = GL_COMPUTE_SHADER, .src = shader_blur_comp }
     });
-    assert (state.comp_shader_blur != 0);
+    if (state.comp_shader_blur == 0)
+    {
+        return -1;
+    }
     state.shader_map = create_shader_program (3,
         (shader_source[]){
             { .type = GL_VERTEX_SHADER,   .src = shader_map_vert },
             { .type = GL_GEOMETRY_SHADER, .src = shader_map_geom },
             { .type = GL_FRAGMENT_SHADER, .src = shader_map_frag }
     });
-    assert (state.shader_map != 0);
+    if (state.shader_map == 0)
+    {
+        return -1;
+    }
     {
         static constexpr float vertices[] = {
             -1.0f,
@@ -149,7 +170,7 @@ int backend_init (void)
             (const float (*)[]) & vertices, sizeof (vertices), 3);
     }
     {
-        static constexpr float vertices[] = { 0.0f, 0.0f, 1.0f };
+        static constexpr float vertices[] = { 0.5f, 0.5f, 1.0f };
         state.point_vx_data = init_vertex_data (
             (const float (*)[]) & vertices, sizeof (vertices), 1);
     }
@@ -262,8 +283,13 @@ GLFWwindow *init_glfw (void)
     LOG (LOG_INFO, "Initialize window\n");
     // glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
     // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-    // glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    // glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 5);
+#if !NDEBUG
+    glfwWindowHint (GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
+#endif
+
+    glfwWindowHint (GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     GLFWwindow *window = glfwCreateWindow (
         WINDOW_WIDTH, WINDOW_HEIGHT, "N-Body", nullptr, nullptr);
     glfwMakeContextCurrent (window);
@@ -278,6 +304,7 @@ GLFWwindow *init_glfw (void)
 
 void draw (void)
 {
+    glBindFramebuffer (GL_FRAMEBUFFER, 0);
     glClearColor (0.0f, 1.0f, 1.0f, 1.0f);
     glClear (GL_COLOR_BUFFER_BIT);
 
@@ -300,10 +327,10 @@ void draw (void)
         0,
         SIZE_ELEM * NUM_ANTS * sizeof (GLfloat),
         state.ants_pos);
-    glBindFramebuffer (GL_FRAMEBUFFER, state.active_framebuffer);
     glBindVertexArray (state.point_vx_data.VAO);
     glViewport (0, 0, MAP_WIDTH, MAP_HEIGHT);
     glUseProgram (state.shader_map);
+    glBindFramebuffer (GL_FRAMEBUFFER, state.active_framebuffer);
     glDrawArraysInstanced (GL_POINTS, 0, 1, NUM_ANTS);
     state.current_map_is_a = swap_textures (state.current_map_is_a);
 
@@ -328,7 +355,6 @@ void draw (void)
     state.current_map_is_a = swap_textures (state.current_map_is_a);
     // Swap buffers and poll for events
     glfwSwapBuffers (state.window);
-    glfwSetWindowTitle (state.window, state.window_name);
     // sleep(1);
 }
 
@@ -357,13 +383,9 @@ void update (void)
 #else
     arena_reset (&state.arena);
     bh_tree tree;
-    bh_tree_init (&tree,
-        &(quad){
-            .x = MAP_WIDTH / 2.0f,
-            .y = MAP_HEIGHT / 2.0f,
-            .length = { .full = MAP_WIDTH, .half = MAP_WIDTH / 2.0f }
-    },
-        &state.arena);
+    auto q = (quad){ .x = 0.0f, .y = 0.0f, .length = { .full = 1000000 } };
+    q.length.half = q.length.full / 2.0f;
+    bh_tree_init (&tree, &q, &state.arena);
     for (int i = 0; i < NUM_ANTS; i++)
     {
         if (quad_contains (&tree.quad, *state.ants[i].x, *state.ants[i].y))
@@ -663,4 +685,100 @@ void print_uniforms (const GLuint program)
         }
         free (block_unifs);
     }
+}
+
+APIENTRY void opengl_error_callback (GLenum source,
+    GLenum type,
+    GLuint id,
+    GLenum severity,
+    GLsizei length,
+    const GLchar *message,
+    const void *user_param)
+{
+    const char *source_str = nullptr;
+    const char *type_str = nullptr;
+    const char *severity_str = nullptr;
+    switch (source)
+    {
+    case GL_DEBUG_SOURCE_API:
+        source_str = "API";
+        break;
+    case GL_DEBUG_SOURCE_APPLICATION:
+        source_str = "APPLICATION";
+        break;
+    case GL_DEBUG_SOURCE_OTHER:
+        source_str = "OTHER";
+        break;
+    case GL_DEBUG_SOURCE_SHADER_COMPILER:
+        source_str = "SHADER_COMPILER";
+        break;
+    case GL_DEBUG_SOURCE_THIRD_PARTY:
+        source_str = "THIRD_PARTY";
+        break;
+    case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
+        source_str = "WINDOW_SYSTEM";
+        break;
+    default:
+        source_str = "UNKNOWN_SOURCE";
+        break;
+    }
+    switch (type)
+    {
+    case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+        type_str = "DEPRECATED_BEHAVIOR";
+        break;
+    case GL_DEBUG_TYPE_ERROR:
+        type_str = "ERROR";
+        break;
+    case GL_DEBUG_TYPE_MARKER:
+        type_str = "MARKER";
+        break;
+    case GL_DEBUG_TYPE_OTHER:
+        type_str = "OTHER";
+        break;
+    case GL_DEBUG_TYPE_PERFORMANCE:
+        type_str = "PERFORMANCE";
+        break;
+    case GL_DEBUG_TYPE_POP_GROUP:
+        type_str = "POP_GROUP";
+        break;
+    case GL_DEBUG_TYPE_PORTABILITY:
+        type_str = "PORTABILITY";
+        break;
+    case GL_DEBUG_TYPE_PUSH_GROUP:
+        type_str = "PUSH_GROUP";
+        break;
+    case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+        type_str = "UNDEFINED_BEHAVIOR";
+        break;
+    default:
+        type_str = "UNKNOWN_TYPE";
+        break;
+    }
+    switch (severity)
+    {
+    case GL_DEBUG_SEVERITY_HIGH:
+        severity_str = "HIGH";
+        break;
+    case GL_DEBUG_SEVERITY_LOW:
+        severity_str = "LOW";
+        break;
+    case GL_DEBUG_SEVERITY_MEDIUM:
+        severity_str = "MEDIUM";
+        break;
+    case GL_DEBUG_SEVERITY_NOTIFICATION:
+        severity_str = "NOTIFICATION";
+        return;
+        break;
+    default:
+        severity_str = "UNKNOWN_SEVERITY";
+        break;
+    }
+    LOG (LOG_ERROR,
+        "(%d) %s(%s) in %s:\n",
+        id,
+        type_str,
+        source_str,
+        severity_str);
+    LOG (LOG_CONTINUE, " - %s\n", message);
 }
