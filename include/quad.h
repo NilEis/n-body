@@ -1,6 +1,8 @@
 ﻿#ifndef QUADTREE_H
 #define QUADTREE_H
 
+#include <stdbool.h>
+
 typedef enum
 {
     NW,

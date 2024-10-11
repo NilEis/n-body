@@ -6,15 +6,17 @@
 #define MAP_WIDTH (WINDOW_WIDTH / 1)
 #define MAP_HEIGHT (WINDOW_HEIGHT / 1)
 #define NUM_UNIFORMS 3
-#define NUM_ANTS 5000
+#define NUM_ANTS 20000
 #define NUM_COMP_SHADERS 2
 
-#define SIZE_UNIFORM_INDEX 1
-#define MAP_SIZE_INDEX 0
+#define SIZE_UNIFORM_INDEX 0
+#define MAP_SIZE_INDEX 1
 #define TIME_UNIFORM_INDEX 2
 
+#define UNIVERSE_SIZE 1e8
 #define GRAVITATIONAL_CONSTANT 6.67E-11
 #define EPSILON 1E4
+#define TREE_EPSILON 0.001
 
 #define MACRO_SQUARED_DIST(a, b) ((a) * (a) + (b) * (b))
 

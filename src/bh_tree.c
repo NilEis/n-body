@@ -25,7 +25,7 @@ static void bh_tree_insert_body (
 
 void bh_tree_init (bh_tree *tree, const quad *q, Arena *arena)
 {
-    if (q != nullptr)
+    if (q != NULL)
     {
         tree->quad.width.full = q->width.full;
         tree->quad.width.half = q->width.half;
@@ -35,22 +35,22 @@ void bh_tree_init (bh_tree *tree, const quad *q, Arena *arena)
         tree->quad.y = q->y;
     }
     tree->node_body.active = false;
-    tree->NE = nullptr;
-    tree->NW = nullptr;
-    tree->SE = nullptr;
-    tree->SW = nullptr;
+    tree->NE = NULL;
+    tree->NW = NULL;
+    tree->SE = NULL;
+    tree->SW = NULL;
     tree->arena = arena;
 }
 
 bool bh_tree_is_leaf (const bh_tree *tree)
 {
-    return tree->NE == nullptr && tree->NW == nullptr && tree->SE == nullptr
-        && tree->SW == nullptr;
+    return tree->NE == NULL && tree->NW == NULL && tree->SE == NULL
+        && tree->SW == NULL;
 }
 
 static bh_tree *bh_tree_split (bh_tree *tree, float x, float y)
 {
-    bh_tree **quad_tree = nullptr;
+    bh_tree **quad_tree = NULL;
     quad_quadrant quadrant = NW;
     switch (quad_get_quadrant (&tree->quad, x, y))
     {
@@ -71,20 +71,17 @@ static bh_tree *bh_tree_split (bh_tree *tree, float x, float y)
         quad_tree = &tree->SE;
         break;
     }
-    if (*quad_tree == nullptr)
+    if (*quad_tree == NULL)
     {
         *quad_tree = arena_alloc (tree->arena, sizeof (bh_tree));
-        bh_tree_init (*quad_tree, nullptr, tree->arena);
+        bh_tree_init (*quad_tree, NULL, tree->arena);
         quad_subdivide (&tree->quad, quadrant, &(*quad_tree)->quad);
     }
     return *quad_tree;
 }
 
-int bh_tree_insert (bh_tree *restrict tree, const ant *restrict v, int d)
+void bh_tree_insert (bh_tree *restrict tree, const ant *restrict v)
 {
-    d++;
-    if (d > 650)
-        LOG (LOG_INFO, "d(%p): %d\n", v, 25);
     if (!tree->node_body.active)
     {
         tree->node_body.active = true;
@@ -95,17 +92,20 @@ int bh_tree_insert (bh_tree *restrict tree, const ant *restrict v, int d)
     else if (!bh_tree_is_leaf (tree))
     {
         bh_tree_add_body (tree, v);
-        bh_tree *sub_tree = bh_tree_split (tree, *v->x, *v->y);
-        return bh_tree_insert (sub_tree, v, d);
+        if (tree->quad.width.half > TREE_EPSILON
+            && tree->quad.height.half > TREE_EPSILON)
+        {
+            bh_tree *sub_tree = bh_tree_split (tree, *v->x, *v->y);
+            bh_tree_insert (sub_tree, v);
+        }
     }
     else
     {
         bh_tree *sub_tree
             = bh_tree_split (tree, tree->node_body.x, tree->node_body.y);
         bh_tree_insert_body (sub_tree, &tree->node_body);
-        return bh_tree_insert (tree, v, d);
+        bh_tree_insert (tree, v);
     }
-    return d;
 }
 
 static float dist (
@@ -114,9 +114,9 @@ static float dist (
     return sqrtf (powf (x2 - x1, 2) + powf (y2 - y1, 2));
 }
 
-int bh_tree_apply_force (const bh_tree *restrict tree, ant *restrict v, int d)
+int bh_tree_apply_force (const bh_tree *restrict tree, ant *restrict v)
 {
-    d++;
+    const double THETA = 2;
     if (bh_tree_is_leaf (tree))
     {
         if (tree->node_body.x != *v->x && tree->node_body.y != *v->y)
@@ -128,37 +128,32 @@ int bh_tree_apply_force (const bh_tree *restrict tree, ant *restrict v, int d)
     else if (tree->quad.width.full
                      / dist (
                          *v->x, *v->x, tree->node_body.x, tree->node_body.x)
-                 < 2
+                 < THETA
              && tree->quad.height.full
                         / dist (
                             *v->y, *v->y, tree->node_body.y, tree->node_body.y)
-                    < 2)
+                    < THETA)
     {
         apply_force (
             v, tree->node_body.x, tree->node_body.y, tree->node_body.mass);
     }
     else
     {
-        if (tree->NW != nullptr)
+        if (tree->NW != NULL)
         {
-            const int temp_d = bh_tree_apply_force (tree->NW, v, d);
-            d = d < temp_d ? temp_d : d;
+            bh_tree_apply_force (tree->NW, v);
         }
-        if (tree->NE != nullptr)
+        if (tree->NE != NULL)
         {
-            const int temp_d = bh_tree_apply_force (tree->NE, v, d);
-            d = d < temp_d ? temp_d : d;
+            bh_tree_apply_force (tree->NE, v);
         }
-        if (tree->SW != nullptr)
+        if (tree->SW != NULL)
         {
-            const int temp_d = bh_tree_apply_force (tree->SW, v, d);
-            d = d < temp_d ? temp_d : d;
+            bh_tree_apply_force (tree->SW, v);
         }
-        if (tree->SE != nullptr)
+        if (tree->SE != NULL)
         {
-            const int temp_d = bh_tree_apply_force (tree->SE, v, d);
-            d = d < temp_d ? temp_d : d;
+            bh_tree_apply_force (tree->SE, v);
         }
     }
-    return d;
 }

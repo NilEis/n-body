@@ -1,7 +1,5 @@
 #version 450 core
 
-#line 2 "main.vert"
-
 #ifndef DEFINES_H
 #include "../include/defines.h"
 #endif//DEFINES_H

@@ -1,7 +1,5 @@
 #version 450 core
 
-#line 2 "blur.comp"
-
 #ifndef DEFINES_H
 #include "../include/defines.h"
 #endif//DEFINES_H

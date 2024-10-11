@@ -6,6 +6,7 @@
 #include "shader.h"
 
 #include <assert.h>
+#include <fenv.h>
 #include <float.h>
 #include <math.h>
 #include <stdarg.h>
@@ -95,7 +96,7 @@ GLuint create_texture_2d ();
 GLuint create_framebuffer (GLuint texture);
 GLuint create_ssbo (const void *p, GLsizeiptr size, int flags);
 
-APIENTRY void opengl_error_callback (GLenum source,
+void opengl_error_callback (GLenum source,
     GLenum type,
     GLuint id,
     GLenum severity,
@@ -112,19 +113,23 @@ int backend_init (void)
     state.window_name[3] = 's';
     state.window_name[4] = '\0';
     state.selected_ant = 0;
-    if (state.window == nullptr)
+    if (state.window == NULL)
     {
         return -1;
     }
     LOG (LOG_INFO, "Init GLAD\n");
     gladLoadGL (glfwGetProcAddress);
-    glDebugMessageCallback (opengl_error_callback, nullptr);
+    glDebugMessageCallback (opengl_error_callback, NULL);
     LOG (LOG_INFO, "Load shaders\n");
     state.render_passes_n = 1;
     state.shader = create_shader_program (2,
         (shader_source[]){
-            { .type = GL_FRAGMENT_SHADER, .src = shader_main_frag },
-            { .type = GL_VERTEX_SHADER,   .src = shader_main_vert }
+            { .type = GL_VERTEX_SHADER,
+             .src = shader_main_vert,
+             .name = "main vertex shader"   },
+            { .type = GL_FRAGMENT_SHADER,
+             .src = shader_main_frag,
+             .name = "main fragment shader" }
     });
     if (state.shader == 0)
     {
@@ -132,7 +137,9 @@ int backend_init (void)
     }
     state.comp_shader_sub = create_shader_program (1,
         (shader_source[]){
-            { .type = GL_COMPUTE_SHADER, .src = shader_sub_comp }
+            { .type = GL_COMPUTE_SHADER,
+             .src = shader_sub_comp,
+             .name = "sub compute shader" }
     });
     if (state.comp_shader_sub == 0)
     {
@@ -140,24 +147,32 @@ int backend_init (void)
     }
     state.comp_shader_blur = create_shader_program (1,
         (shader_source[]){
-            { .type = GL_COMPUTE_SHADER, .src = shader_blur_comp }
+            { .type = GL_COMPUTE_SHADER,
+             .src = shader_blur_comp,
+             .name = "blur compute shader" }
     });
     if (state.comp_shader_blur == 0)
     {
         return -1;
     }
-    state.shader_map = create_shader_program (3,
+    state.shader_map = create_shader_program (2,
         (shader_source[]){
-            { .type = GL_VERTEX_SHADER,   .src = shader_map_vert },
-            { .type = GL_GEOMETRY_SHADER, .src = shader_map_geom },
-            { .type = GL_FRAGMENT_SHADER, .src = shader_map_frag }
+            { .type = GL_VERTEX_SHADER,
+             .src = shader_map_vert,
+             .name = "Map vertex shader"   },
+ // { .type = GL_GEOMETRY_SHADER,
+  //  .src = shader_map_geom,
+  //  .name = "Map geometry shader" },
+            { .type = GL_FRAGMENT_SHADER,
+             .src = shader_map_frag,
+             .name = "Map fragment shader" }
     });
     if (state.shader_map == 0)
     {
         return -1;
     }
     {
-        static constexpr float vertices[] = {
+        static float vertices[] = {
             -1.0f,
             -1.0f,
             0.0f, // v1
@@ -172,7 +187,7 @@ int backend_init (void)
             (const float (*)[]) & vertices, sizeof (vertices), 3);
     }
     {
-        static constexpr float vertices[] = { 0.0f, 0.0f, 1.0f };
+        static float vertices[] = { 0.0f, 0.0f, 1.0f };
         state.point_vx_data = init_vertex_data (
             (const float (*)[]) & vertices, sizeof (vertices), 1);
     }
@@ -203,12 +218,12 @@ int backend_init (void)
         for (int i = 0; i < SIZE_ELEM * NUM_ANTS; i += SIZE_ELEM)
         {
             const GLfloat r = (GLfloat)rand ();
-            GLfloat d = (GLfloat)(rand () % (MAP_HEIGHT / 2));
+            GLfloat d = (GLfloat)(rand () % (int)UNIVERSE_SIZE);
             d = d == 0 ? 1 : d;
             const GLfloat x = cosf (r);
             const GLfloat y = sinf (r);
-            GLfloat x_pos = MAP_WIDTH / 2 + x * d;
-            GLfloat y_pos = MAP_HEIGHT / 2 + y * d;
+            GLfloat x_pos = 1.0f / 2.0f + x * d;
+            GLfloat y_pos = 1.0f / 2.0f + y * d;
             state.ants_pos[i + 0] = x_pos;
             state.ants_pos[i + 1] = y_pos;
             if (x_pos < minx)
@@ -234,6 +249,10 @@ int backend_init (void)
         state.main_quad.height.half = state.main_quad.height.full / 2.0f;
         state.main_quad.x = minx + state.main_quad.width.half;
         state.main_quad.y = miny + state.main_quad.height.half;
+        state.map_size[0] = minx;
+        state.map_size[1] = miny;
+        state.map_size[2] = maxx;
+        state.map_size[3] = maxy;
     }
     state.ssbo = create_ssbo (
         state.ants_pos, sizeof (state.ants_pos), GL_DYNAMIC_STORAGE_BIT);
@@ -286,9 +305,9 @@ int backend_init (void)
         state.ants[i].vy = 0.0;
         state.ants[i].fx = 0;
         state.ants[i].fy = 0;
-        state.ants[i].w = 2.0E14;
+        state.ants[i].w = ((double)(rand () % 10000) / 10000.0) * 10 + 1e16;
     }
-    state.ants[0].w = 2.0E18;
+    //state.ants[0].w = 1e2;
     state.ants[0].vx = 0;
     state.ants[0].vy = 0;
     glBufferSubData (GL_UNIFORM_BUFFER,
@@ -307,7 +326,7 @@ GLFWwindow *init_glfw (void)
     if (!glfwInit ())
     {
         LOG (LOG_ERROR, "Could not initialize glfw\n");
-        return nullptr;
+        return NULL;
     }
     glfwSetErrorCallback (error_callback);
     // Create window
@@ -321,14 +340,15 @@ GLFWwindow *init_glfw (void)
 #endif
 
     glfwWindowHint (GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    GLFWwindow *window = glfwCreateWindow (
-        WINDOW_WIDTH, WINDOW_HEIGHT, "N-Body", nullptr, nullptr);
+    glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_API);
+    GLFWwindow *window
+        = glfwCreateWindow (WINDOW_WIDTH, WINDOW_HEIGHT, "N-Body", NULL, NULL);
     glfwMakeContextCurrent (window);
     glfwSetFramebufferSizeCallback (window, framebuffer_size_callback);
     if (!window)
     {
         LOG (LOG_ERROR, "Could not create window or context\n");
-        return nullptr;
+        return NULL;
     }
     return window;
 }
@@ -349,6 +369,10 @@ void draw (void)
                 + state.uniforms_buffer_object.offset[TIME_UNIFORM_INDEX],
         &state.time,
         sizeof (GLint));
+    memcpy (state.uniforms_buffer_object.mem
+                + state.uniforms_buffer_object.offset[MAP_SIZE_INDEX],
+        state.map_size,
+        4 * sizeof (GLfloat));
     glBufferSubData (GL_UNIFORM_BUFFER,
         0,
         state.uniforms_buffer_object.block_size,
@@ -415,57 +439,60 @@ void update (void)
     arena_reset (&state.arena);
     bh_tree tree;
     bh_tree_init (&tree, &state.main_quad, &state.arena);
-    int max_d = 0;
     for (int i = 0; i < NUM_ANTS; i++)
     {
         if (quad_contains (&tree.quad, *state.ants[i].x, *state.ants[i].y))
         {
-            const int d = bh_tree_insert (&tree, &state.ants[i], 0);
-            max_d = max_d < d ? d : max_d;
+            bh_tree_insert (&tree, &state.ants[i]);
         }
     }
-    LOG (LOG_INFO, "Max insert depth = %d\n", max_d);
     quad_member_type minx = DBL_MAX;
     quad_member_type miny = DBL_MAX;
     quad_member_type maxx = DBL_MIN;
     quad_member_type maxy = DBL_MIN;
-    max_d = 0;
+#pragma omp parallel for
     for (int i = 0; i < NUM_ANTS; i++)
     {
         state.ants[i].fx = 0;
         state.ants[i].fy = 0;
         if (quad_contains (&tree.quad, *state.ants[i].x, *state.ants[i].y))
         {
-            const int d = bh_tree_apply_force (&tree, &state.ants[i], 0);
-            max_d = max_d < d ? d : max_d;
+            bh_tree_apply_force (&tree, &state.ants[i]);
         }
         update_ant (&state.ants[i]);
         const quad_member_type x_pos = *state.ants[i].x;
         const quad_member_type y_pos = *state.ants[i].y;
         if (x_pos < minx)
         {
+#pragma omp atomic write
             minx = x_pos;
         }
         else if (x_pos > maxx)
         {
+#pragma omp atomic write
             maxx = x_pos;
         }
         if (y_pos < miny)
         {
+#pragma omp atomic write
             miny = y_pos;
         }
         else if (y_pos > maxy)
         {
+#pragma omp atomic write
             maxy = y_pos;
         }
     }
-    LOG (LOG_INFO, "Max apply force depth = %d\n", max_d);
     state.main_quad.width.full = maxx - minx;
     state.main_quad.width.half = state.main_quad.width.full / 2.0f;
     state.main_quad.height.full = maxy - miny;
     state.main_quad.height.half = state.main_quad.height.full / 2.0f;
     state.main_quad.x = minx + state.main_quad.width.half;
     state.main_quad.y = miny + state.main_quad.height.half;
+    state.map_size[0] = minx;
+    state.map_size[1] = miny;
+    state.map_size[2] = maxx;
+    state.map_size[3] = maxy;
     arena_free (&state.arena);
 #endif
 }
@@ -558,7 +585,7 @@ GLuint create_framebuffer (const GLuint texture)
     glFramebufferTexture (GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture, 0);
 
     // Set the list of draw buffers.
-    constexpr GLenum DrawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
+    GLenum DrawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
     glDrawBuffers (1, DrawBuffers);
     return FramebufferName;
 }
@@ -575,7 +602,7 @@ vertex_data_t init_vertex_data (
     glBindBuffer (GL_ARRAY_BUFFER, VBO);
     glBufferData (GL_ARRAY_BUFFER, size, *vertices, GL_STATIC_DRAW);
     glVertexAttribPointer (
-        0, num, GL_FLOAT, GL_FALSE, 3 * sizeof (float), nullptr);
+        0, num, GL_FLOAT, GL_FALSE, 3 * sizeof (float), NULL);
     glEnableVertexAttribArray (0);
     return (vertex_data_t){ .VBO = VBO, .VAO = VAO };
 }
@@ -612,7 +639,7 @@ static void error_callback (const int error, const char *description)
 }
 
 void framebuffer_size_callback (
-    [[maybe_unused]] GLFWwindow *window, const int width, const int height)
+    GLFWwindow *window, const int width, const int height)
 {
     // make sure the viewport matches the new window dimensions; note that
     // width and height will be significantly larger than specified on retina
@@ -694,10 +721,9 @@ void print_uniforms (const GLuint program)
     GLint num_blocks = 0;
     glGetProgramInterfaceiv (
         program, GL_UNIFORM_BLOCK, GL_ACTIVE_RESOURCES, &num_blocks);
-    constexpr GLenum block_properties[1] = { GL_NUM_ACTIVE_VARIABLES };
-    constexpr GLenum active_unif_prop[1] = { GL_ACTIVE_VARIABLES };
-    constexpr GLenum unif_properties[3]
-        = { GL_NAME_LENGTH, GL_TYPE, GL_LOCATION };
+    GLenum block_properties[1] = { GL_NUM_ACTIVE_VARIABLES };
+    GLenum active_unif_prop[1] = { GL_ACTIVE_VARIABLES };
+    GLenum unif_properties[3] = { GL_NAME_LENGTH, GL_TYPE, GL_LOCATION };
 
     for (int blockIx = 0; blockIx < num_blocks; ++blockIx)
     {
@@ -708,7 +734,7 @@ void print_uniforms (const GLuint program)
             1,
             block_properties,
             1,
-            nullptr,
+            NULL,
             &num_active_unifs);
 
         if (!num_active_unifs)
@@ -721,7 +747,7 @@ void print_uniforms (const GLuint program)
             1,
             active_unif_prop,
             num_active_unifs,
-            nullptr,
+            NULL,
             &block_unifs[0]);
         for (int unifIx = 0; unifIx < num_active_unifs; ++unifIx)
         {
@@ -732,7 +758,7 @@ void print_uniforms (const GLuint program)
                 3,
                 unif_properties,
                 3,
-                nullptr,
+                NULL,
                 values);
             state.uniforms_buffer_object.names[unifIx]
                 = calloc (values[0], sizeof (char));
@@ -740,7 +766,7 @@ void print_uniforms (const GLuint program)
                 GL_UNIFORM,
                 block_unifs[unifIx],
                 values[0],
-                nullptr,
+                NULL,
                 state.uniforms_buffer_object.names[unifIx]);
             LOG (LOG_INFO,
                 " - Name: %s\n",
@@ -750,7 +776,7 @@ void print_uniforms (const GLuint program)
     }
 }
 
-APIENTRY void opengl_error_callback (GLenum source,
+void opengl_error_callback (GLenum source,
     GLenum type,
     GLuint id,
     GLenum severity,
@@ -758,9 +784,9 @@ APIENTRY void opengl_error_callback (GLenum source,
     const GLchar *message,
     const void *user_param)
 {
-    const char *source_str = nullptr;
-    const char *type_str = nullptr;
-    const char *severity_str = nullptr;
+    const char *source_str = NULL;
+    const char *type_str = NULL;
+    const char *severity_str = NULL;
     switch (source)
     {
     case GL_DEBUG_SOURCE_API:

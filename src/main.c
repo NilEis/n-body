@@ -13,6 +13,10 @@ int main ()
     {
         return 1;
     }
+    for(int i = 0; i < 0; i++)
+    {
+        update ();
+    }
     GLFWwindow *window = backend_get_window ();
     while (!glfwWindowShouldClose (window))
     {

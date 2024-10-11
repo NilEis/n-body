@@ -6,6 +6,14 @@ project(
 
 set(GLFW_USE_HYBRID_HPG TRUE)
 
+set(${PROJECT_NAME}_libs_to_link)
+
+set(OpenMP_RUNTIME_MSVC llvm)
+find_package(OpenMP)
+if (OpenMP_C_FOUND)
+    list(APPEND libraries OpenMP::OpenMP_C)
+endif ()
+
 file(DOWNLOAD
         https://github.com/cpm-cmake/CPM.cmake/releases/latest/download/CPM.cmake
         ${CMAKE_BINARY_DIR}/CPM.cmake)
@@ -31,9 +39,13 @@ cpmaddpackage(
         DOWNLOAD_ONLY
         YES)
 
+list(APPEND libraries glfw glad_gl_core_45)
+
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/sanitizer.cmake)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/sanitizer_trap.cmake)
 
 create_resources(
         FILES ${CMAKE_CURRENT_SOURCE_DIR}/shader/* ${CMAKE_CURRENT_SOURCE_DIR}/include/defines.h
@@ -45,27 +57,31 @@ add_subdirectory("${glad_SOURCE_DIR}/cmake" "${glad_BINARY_DIR}")
 
 glad_add_library(glad_gl_core_45 REPRODUCIBLE API gl:core=4.5)
 
-file(GLOB N-BODY_SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
+file(GLOB ${PROJECT_NAME}_SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
 
-list(APPEND N-BODY_SOURCE_FILES ${CMAKE_CURRENT_BINARY_DIR}/generated/src/shader.c)
+list(APPEND ${PROJECT_NAME}_SOURCE_FILES ${CMAKE_CURRENT_BINARY_DIR}/generated/src/shader.c)
 
-add_executable(n-body ${N-BODY_SOURCE_FILES})
+add_executable(${PROJECT_NAME} ${${PROJECT_NAME}_SOURCE_FILES})
 
 set(SHADER_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shader)
 set(SHADER_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/shader)
 
 file(GLOB HEADER_FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h ${CMAKE_CURRENT_BINARY_DIR}/generated/include/*.h)
 
-target_precompile_headers(n-body PRIVATE ${HEADER_FILES})
+target_precompile_headers(${PROJECT_NAME} PRIVATE ${HEADER_FILES})
 
-target_include_directories(n-body PRIVATE
+if(MSVC)
+SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/PROFILE")
+endif (MSVC)
+
+target_include_directories(${PROJECT_NAME} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include/
         ${CMAKE_CURRENT_BINARY_DIR}/generated/include/
         ${arena_SOURCE_DIR}/)
 
-target_link_libraries(n-body glfw glad_gl_core_45)
+target_link_libraries(${PROJECT_NAME} ${libraries})
 
-set_property(TARGET n-body PROPERTY C_STANDARD 23)
+set_property(TARGET ${PROJECT_NAME} PROPERTY C_STANDARD 17)
 
 include(CheckIPOSupported)
 
@@ -75,7 +91,7 @@ check_ipo_supported(
         LANGUAGES C)
 if (result)
     message(STATUS "IPO is supported")
-    set_property(TARGET n-body PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    set_property(TARGET ${PROJECT_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 else ()
     message(WARNING "IPO is not supported: ${output}")
 endif ()
@@ -117,6 +133,5 @@ if (EMSCRIPTEN)
     string(REPLACE "-rdynamic" "" CMAKE_SHARED_LIBRARY_LINK_C_FLAGS
             "${CMAKE_SHARED_LIBRARY_LINK_C_FLAGS}")
 endif ()
-
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/create_clangd.cmake)

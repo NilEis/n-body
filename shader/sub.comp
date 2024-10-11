@@ -1,7 +1,5 @@
 #version 450 core
 
-#line 2 "sub.comp"
-
 #ifndef DEFINES_H
 #include "../include/defines.h"
 #endif//DEFINES_H
@@ -10,7 +8,7 @@
 #include "shader_includes.glsl"
 #endif//SHADER_INCLUDES_GLSL
 
-const float S = 0.005;
+const float S = 0.08;
 
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 

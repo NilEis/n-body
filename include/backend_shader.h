@@ -5,9 +5,10 @@ typedef struct
 {
     GLenum type;
     const char *src;
+    const char *name;
 } shader_source;
 
-GLuint compile_shader (const char *src, const GLenum type);
+GLuint compile_shader (const char *src, const char *name, const GLenum type);
 
 GLuint link_shader_program (int num_shaders, const GLuint *shaders);
 

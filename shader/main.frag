@@ -1,7 +1,5 @@
 #version 450 core
 
-#line 2 "main.frag"
-
 layout(location = 0) out vec4 FragColor;
 
 #ifndef DEFINES_H

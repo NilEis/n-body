@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-GLuint compile_shader (const char *src, const GLenum type)
+GLuint compile_shader (const char *src, const char *name, const GLenum type)
 {
     GLint success;
     char *c_src = calloc (strlen (src) + 1, sizeof (char));
@@ -59,11 +59,11 @@ GLuint compile_shader (const char *src, const GLenum type)
         LOG (LOG_CONTINUE, "Unknown");
         break;
     }
-    LOG (LOG_CONTINUE, " shader");
+    LOG (LOG_CONTINUE, " shader(%s)", name);
 
     // create shader object
     const GLuint shader = glCreateShader (type);
-    glShaderSource (shader, 7, srcs, nullptr);
+    glShaderSource (shader, 7, srcs, NULL);
     glCompileShader (shader);
 
     // check for shader compile errors
@@ -71,7 +71,7 @@ GLuint compile_shader (const char *src, const GLenum type)
     if (!success)
     {
         GLchar infoLog[512];
-        glGetShaderInfoLog (shader, 512, nullptr, infoLog);
+        glGetShaderInfoLog (shader, 512, NULL, infoLog);
         LOG (LOG_CONTINUE, " - error\n");
         LOG (LOG_ERROR, " - Shader compilation failed: %s\n", infoLog);
         free (c_src);
@@ -96,7 +96,7 @@ GLuint link_shader_program (int num_shaders, const GLuint *shaders)
     glGetProgramiv (program, GL_LINK_STATUS, &success);
     if (!success)
     {
-        glGetProgramInfoLog (program, 512, nullptr, infoLog);
+        glGetProgramInfoLog (program, 512, NULL, infoLog);
         LOG (LOG_CONTINUE, " - error\n");
         LOG (LOG_ERROR, " - Program linking failed: %s\n", infoLog);
         program = 0;
@@ -117,7 +117,7 @@ GLuint vlink_shader_program (const int num_shaders, ...)
     va_list ap;
     GLuint *shaders = calloc (num_shaders, sizeof (GLuint));
     va_start (ap, num_shaders);
-    for (auto i = 0; i < num_shaders; i++)
+    for (int i = 0; i < num_shaders; i++)
     {
         shaders[i] = va_arg (ap, GLuint);
     }
@@ -132,10 +132,11 @@ GLuint create_shader_program (
 {
     GLuint *shaders = calloc (num_shaders, sizeof (GLuint));
     GLuint program = 0;
-    assert (shaders != nullptr);
+    assert (shaders != NULL);
     for (int i = 0; i < num_shaders; i++)
     {
-        shaders[i] = compile_shader (shader_srcs[i].src, shader_srcs[i].type);
+        shaders[i] = compile_shader (
+            shader_srcs[i].src, shader_srcs[i].name, shader_srcs[i].type);
         if (shaders[i] == 0)
         {
             for (int j = 0; j < i; j++)

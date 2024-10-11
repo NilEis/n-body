@@ -1,7 +1,5 @@
 #version 450 core
 
-#line 2 "main.geom"
-
 #ifndef DEFINES_H
 #include "../include/defines.h"
 #endif//DEFINES_H
@@ -16,8 +14,6 @@
 layout (points) in;
 layout (triangle_strip, max_vertices = RES*2+2) out;
 
-out vec3 fColor;
-
 const float PI = 3.1415926;
 
 void main() {
@@ -28,10 +24,8 @@ void main() {
         // Offset from center of point (0.3 to accomodate for aspect ratio)
         vec4 offset = vec4(cos(ang) * CIRCLE_SIZE, -sin(ang) * CIRCLE_SIZE, 0.0, 0.0);
         gl_Position = gl_in[0].gl_Position + offset;
-        fColor=vec3(length(offset));
         EmitVertex();
         gl_Position = gl_in[0].gl_Position;
-        fColor=vec3(1.0);
         EmitVertex();
     }
 
