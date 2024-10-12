@@ -1,4 +1,5 @@
 #include "backend.h"
+#include "thread_creator.h"
 
 static struct
 {
@@ -6,7 +7,6 @@ static struct
     double last_frame;
 } delta_time = { 0 };
 
-extern void crash (void);
 int main ()
 {
     if (backend_init () == -1)
@@ -20,7 +20,7 @@ int main ()
     GLFWwindow *window = backend_get_window ();
     while (!glfwWindowShouldClose (window))
     {
-        bool speed_up = glfwGetKey (window, GLFW_KEY_SPACE) != GLFW_PRESS;
+        bool speed_up = glfwGetKey (window, GLFW_KEY_SPACE) == GLFW_PRESS;
         draw ();
         for (int i = 0; i < (speed_up ? 20 : 1); i++)
         {

@@ -6,12 +6,21 @@ project(
 
 set(GLFW_USE_HYBRID_HPG TRUE)
 
-set(${PROJECT_NAME}_libs_to_link)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
+set(${PROJECT_NAME}_libs_to_link Threads::Threads)
+
+set(${PROJECT_NAME}_defines)
+
+if (CMAKE_USE_PTHREADS_INIT)
+    #list(APPEND ${PROJECT_NAME}_defines -DPTHREAD_FOUND=1)
+endif (CMAKE_USE_PTHREADS_INIT)
 
 set(OpenMP_RUNTIME_MSVC llvm)
 find_package(OpenMP)
 if (OpenMP_C_FOUND)
-    list(APPEND libraries OpenMP::OpenMP_C)
+    list(APPEND ${PROJECT_NAME}_libs_to_link OpenMP::OpenMP_C)
 endif ()
 
 file(DOWNLOAD
@@ -90,6 +99,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
         ${nuklear_SOURCE_DIR}/)
 
 target_link_libraries(${PROJECT_NAME} ${libraries})
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE ${${PROJECT_NAME}_defines})
 
 set_property(TARGET ${PROJECT_NAME} PROPERTY C_STANDARD 17)
 

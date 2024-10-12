@@ -15,12 +15,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-
+#define USE_NUKLEAR 1
+#if USE_NUKLEAR
 #include "nuklear_defines.h"
 #define NK_GLFW_GL4_IMPLEMENTATION
 #include "nuklear.h"
 
 #include "demo/glfw_opengl4/nuklear_glfw_gl4.h"
+#endif
 
 #define SIZE_ELEM 2
 
@@ -326,13 +328,16 @@ int backend_init (void)
         0,
         state.uniforms_buffer_object.block_size,
         state.uniforms_buffer_object.mem);
-
+#if USE_NUKLEAR
     LOG (LOG_INFO, "Init nuklear\n");
     state.nuklear.ctx = nk_glfw3_init (state.window,
         NK_GLFW3_INSTALL_CALLBACKS,
         MAX_VERTEX_BUFFER,
         MAX_ELEMENT_BUFFER);
-
+    struct nk_font_atlas *atlas;
+    nk_glfw3_font_stash_begin (&atlas);
+    nk_glfw3_font_stash_end ();
+#endif
     state.time = 0;
     LOG (LOG_INFO, "finished init\n");
     return 0;
@@ -404,7 +409,6 @@ void draw (void)
         0,
         state.uniforms_buffer_object.block_size,
         state.uniforms_buffer_object.mem);
-
     glBufferSubData (GL_SHADER_STORAGE_BUFFER,
         0,
         SIZE_ELEM * NUM_ANTS * sizeof (GLfloat),
@@ -435,7 +439,7 @@ void draw (void)
     glUseProgram (state.shader);
     glDrawArrays (GL_TRIANGLES, 0, 3);
     state.current_map_is_a = swap_textures (state.current_map_is_a);
-
+#if USE_NUKLEAR
     nk_glfw3_new_frame ();
     if (nk_begin (state.nuklear.ctx,
             "Demo",
@@ -445,6 +449,8 @@ void draw (void)
     {
     }
     nk_end (state.nuklear.ctx);
+    nk_glfw3_render (NK_ANTI_ALIASING_OFF);
+#endif
     // Swap buffers and poll for events
     glfwSwapBuffers (state.window);
     // sleep(1);
