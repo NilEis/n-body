@@ -14,10 +14,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+#include "nuklear_defines.h"
+#define NK_GLFW_GL4_IMPLEMENTATION
+#include "nuklear.h"
+
+#include "demo/glfw_opengl4/nuklear_glfw_gl4.h"
 
 #define SIZE_ELEM 2
 
 #define INTERNAL_TEXTURE_FORMAT GL_RGBA32F
+
+#define MAX_VERTEX_BUFFER (512 * 1024)
+#define MAX_ELEMENT_BUFFER (128 * 1024)
 
 typedef struct
 {
@@ -35,6 +45,10 @@ typedef struct
     GLuint comp_shader_blur;
     GLuint shader_map;
     GLuint comp_shader_sub;
+    struct
+    {
+        struct nk_context *ctx;
+    } nuklear;
     struct
     {
         GLuint shader;
@@ -191,8 +205,6 @@ int backend_init (void)
         state.point_vx_data = init_vertex_data (
             (const float (*)[]) & vertices, sizeof (vertices), 1);
     }
-    state.size[0] = (GLfloat)WINDOW_WIDTH;
-    state.size[1] = (GLfloat)WINDOW_HEIGHT;
     glViewport (0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
     state.map_size[0] = (GLfloat)0;
     state.map_size[1] = (GLfloat)0;
@@ -208,7 +220,7 @@ int backend_init (void)
     state.map_b_framebuffer = create_framebuffer (state.map_b);
     {
         LOG (LOG_INFO, "Generating particles\n");
-        srand (0);
+        srand (time (NULL));
         memset (state.ants_pos, 0, sizeof (state.ants_pos));
 
         quad_member_type minx = DBL_MAX;
@@ -307,13 +319,19 @@ int backend_init (void)
         state.ants[i].fy = 0;
         state.ants[i].w = ((double)(rand () % 10000) / 10000.0) * 10 + 1e16;
     }
-    //state.ants[0].w = 1e2;
+    state.ants[0].w = 1e17;
     state.ants[0].vx = 0;
     state.ants[0].vy = 0;
     glBufferSubData (GL_UNIFORM_BUFFER,
         0,
         state.uniforms_buffer_object.block_size,
         state.uniforms_buffer_object.mem);
+
+    LOG (LOG_INFO, "Init nuklear\n");
+    state.nuklear.ctx = nk_glfw3_init (state.window,
+        NK_GLFW3_INSTALL_CALLBACKS,
+        MAX_VERTEX_BUFFER,
+        MAX_ELEMENT_BUFFER);
 
     state.time = 0;
     LOG (LOG_INFO, "finished init\n");
@@ -341,8 +359,17 @@ GLFWwindow *init_glfw (void)
 
     glfwWindowHint (GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_API);
-    GLFWwindow *window
-        = glfwCreateWindow (WINDOW_WIDTH, WINDOW_HEIGHT, "N-Body", NULL, NULL);
+
+    GLFWmonitor *monitor = glfwGetPrimaryMonitor ();
+    const GLFWvidmode *mode = glfwGetVideoMode (monitor);
+    glfwWindowHint (GLFW_RED_BITS, mode->redBits);
+    glfwWindowHint (GLFW_GREEN_BITS, mode->greenBits);
+    glfwWindowHint (GLFW_BLUE_BITS, mode->blueBits);
+    glfwWindowHint (GLFW_REFRESH_RATE, mode->refreshRate);
+    state.size[0] = mode->width;
+    state.size[1] = mode->height;
+    GLFWwindow *window = glfwCreateWindow (
+        mode->width, mode->height, "N-Body", monitor, NULL);
     glfwMakeContextCurrent (window);
     glfwSetFramebufferSizeCallback (window, framebuffer_size_callback);
     if (!window)
@@ -408,6 +435,16 @@ void draw (void)
     glUseProgram (state.shader);
     glDrawArrays (GL_TRIANGLES, 0, 3);
     state.current_map_is_a = swap_textures (state.current_map_is_a);
+
+    nk_glfw3_new_frame ();
+    if (nk_begin (state.nuklear.ctx,
+            "Demo",
+            nk_rect (50, 50, 230, 250),
+            NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE
+                | NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE))
+    {
+    }
+    nk_end (state.nuklear.ctx);
     // Swap buffers and poll for events
     glfwSwapBuffers (state.window);
     // sleep(1);
@@ -436,6 +473,10 @@ void update (void)
         update_ant (v);
     }
 #else
+    /*LOG (LOG_INFO,
+        "width: %f - %f\n",
+        state.main_quad.width.full,
+        state.main_quad.height.full);*/
     arena_reset (&state.arena);
     bh_tree tree;
     bh_tree_init (&tree, &state.main_quad, &state.arena);
@@ -450,8 +491,10 @@ void update (void)
     quad_member_type miny = DBL_MAX;
     quad_member_type maxx = DBL_MIN;
     quad_member_type maxy = DBL_MIN;
-#pragma omp parallel for
-    for (int i = 0; i < NUM_ANTS; i++)
+    int i;
+#pragma omp parallel for default(none) reduction(min : minx, miny)            \
+    reduction(max : maxx, maxy) shared(state, tree)
+    for (i = 0; i < NUM_ANTS; i++)
     {
         state.ants[i].fx = 0;
         state.ants[i].fy = 0;
@@ -462,26 +505,10 @@ void update (void)
         update_ant (&state.ants[i]);
         const quad_member_type x_pos = *state.ants[i].x;
         const quad_member_type y_pos = *state.ants[i].y;
-        if (x_pos < minx)
-        {
-#pragma omp atomic write
-            minx = x_pos;
-        }
-        else if (x_pos > maxx)
-        {
-#pragma omp atomic write
-            maxx = x_pos;
-        }
-        if (y_pos < miny)
-        {
-#pragma omp atomic write
-            miny = y_pos;
-        }
-        else if (y_pos > maxy)
-        {
-#pragma omp atomic write
-            maxy = y_pos;
-        }
+        minx = x_pos < minx ? x_pos : minx;
+        maxx = x_pos <= maxx ? maxx : x_pos;
+        miny = y_pos < miny ? y_pos : miny;
+        maxy = y_pos <= maxy ? maxy : y_pos;
     }
     state.main_quad.width.full = maxx - minx;
     state.main_quad.width.half = state.main_quad.width.full / 2.0f;

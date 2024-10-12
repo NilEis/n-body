@@ -116,7 +116,7 @@ static float dist (
 
 int bh_tree_apply_force (const bh_tree *restrict tree, ant *restrict v)
 {
-    const double THETA = 2;
+    const double THETA = 2.25;
     if (bh_tree_is_leaf (tree))
     {
         if (tree->node_body.x != *v->x && tree->node_body.y != *v->y)

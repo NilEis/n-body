@@ -38,6 +38,15 @@ cpmaddpackage(
         c2d1c1ce4360d13d5fb94201bfb72cc34a22fa69
         DOWNLOAD_ONLY
         YES)
+cpmaddpackage(
+        NAME
+        nuklear
+        GITHUB_REPOSITORY
+        JoseAFRibeiro/Nuklear-glfw_gl4_fix
+        GIT_TAG
+        f8828ea0c1f4431b74a2552c81a397a1864f8d83
+        DOWNLOAD_ONLY
+        YES)
 
 list(APPEND libraries glfw glad_gl_core_45)
 
@@ -55,7 +64,7 @@ create_resources(
 
 add_subdirectory("${glad_SOURCE_DIR}/cmake" "${glad_BINARY_DIR}")
 
-glad_add_library(glad_gl_core_45 REPRODUCIBLE API gl:core=4.5)
+glad_add_library(glad_gl_core_45 STATIC REPRODUCIBLE API gl:core=4.5 EXTENSIONS GL_ARB_bindless_texture GL_ARB_gpu_shader_int64)
 
 file(GLOB ${PROJECT_NAME}_SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
 
@@ -70,14 +79,15 @@ file(GLOB HEADER_FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h ${CMAKE_CURRENT_B
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE ${HEADER_FILES})
 
-if(MSVC)
-SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/PROFILE")
+if (MSVC)
+    SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/PROFILE")
 endif (MSVC)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include/
         ${CMAKE_CURRENT_BINARY_DIR}/generated/include/
-        ${arena_SOURCE_DIR}/)
+        ${arena_SOURCE_DIR}/
+        ${nuklear_SOURCE_DIR}/)
 
 target_link_libraries(${PROJECT_NAME} ${libraries})
 
