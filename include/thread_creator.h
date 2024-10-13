@@ -8,7 +8,7 @@ typedef pthread_t thread;
 #define THREAD_FUNCTION(name) void *name (void *arg)
 #else
 #include <windows.h>
-typedef DWORD WINAPI (*thread_func) (void *);
+typedef DWORD (*thread_func) (void *);
 typedef HANDLE thread;
 #define THREAD_FUNCTION(name) DWORD WINAPI name (void *arg)
 #endif // PTHREAD_FOUND
