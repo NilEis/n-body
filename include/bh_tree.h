@@ -2,24 +2,12 @@
 #define BH_TREE_H
 #include "defines.h"
 #include "quad.h"
+#include "state.h"
 
 #include <math.h>
 #include <stdbool.h>
 
 #include "arena.h"
-
-#include <log.h>
-
-typedef struct
-{
-    GLfloat *x;
-    GLfloat *y;
-    double vx;
-    double vy;
-    double fx;
-    double fy;
-    double w;
-} ant;
 
 typedef struct
 {
@@ -45,11 +33,14 @@ bool bh_tree_is_leaf (const bh_tree *tree);
 void bh_tree_insert (bh_tree *restrict tree, const ant *restrict v);
 int bh_tree_apply_force (const bh_tree *restrict tree, ant *restrict v);
 
+extern state_t state;
+
 static void apply_force (
     ant *a, const GLfloat x, const GLfloat y, const double w)
 {
-    const float dx = x - *a->x;
-    const float dy = y - *a->y;
+    const int index = 2 * a->pos_index;
+    const float dx = x - (*state.ants_pos_read)[index];
+    const float dy = y - (*state.ants_pos_read)[index + 1];
     double dist = sqrt (dx * dx + dy * dy);
     if (dist < EPSILON)
     {
@@ -66,8 +57,11 @@ static void update_ant (ant *v)
     v->vy += v->fy / i_w;
     v->vx = v->vx == NAN ? 0 : v->vx;
     v->vy = v->vy == NAN ? 0 : v->vy;
-    *v->x += (GLfloat)v->vx;
-    *v->y += (GLfloat)v->vy;
+    const int index = 2 * v->pos_index;
+    (*state.ants_pos_write)[index]
+        = (*state.ants_pos_read)[index] + (GLfloat)v->vx;
+    (*state.ants_pos_write)[index + 1]
+        = (*state.ants_pos_read)[index + 1] + (GLfloat)v->vy;
 }
 
 #endif // BH_TREE_H

@@ -4,6 +4,7 @@
 #include "glad/gl.h"
 #include "log.h"
 #include "shader.h"
+#include "state.h"
 
 #include <assert.h>
 #include <fenv.h>
@@ -24,70 +25,10 @@
 #include "demo/glfw_opengl4/nuklear_glfw_gl4.h"
 #endif
 
-#define SIZE_ELEM 2
-
 #define INTERNAL_TEXTURE_FORMAT GL_RGBA32F
 
 #define MAX_VERTEX_BUFFER (512 * 1024)
 #define MAX_ELEMENT_BUFFER (128 * 1024)
-
-typedef struct
-{
-    GLuint VBO;
-    GLuint VAO;
-} vertex_data_t;
-
-typedef struct
-{
-    Arena arena;
-    quad main_quad;
-    GLFWwindow *window;
-    char window_name[28];
-    GLuint shader;
-    GLuint comp_shader_blur;
-    GLuint shader_map;
-    GLuint comp_shader_sub;
-    struct
-    {
-        struct nk_context *ctx;
-    } nuklear;
-    struct
-    {
-        GLuint shader;
-        char *name;
-        GLuint x;
-        GLuint y;
-        GLuint z;
-        bool swap_maps;
-    } compute_shader_pipeline[NUM_COMP_SHADERS];
-    GLuint map_a;
-    GLuint map_a_framebuffer;
-    GLuint map_b;
-    GLuint map_b_framebuffer;
-    GLuint active_framebuffer;
-    bool current_map_is_a;
-    GLuint ssbo;
-    GLint time;
-    GLint selected_ant;
-    int render_passes_n;
-    vertex_data_t vertex_data;
-    vertex_data_t point_vx_data;
-    GLfloat size[2];
-    GLfloat map_size[4];
-    struct
-    {
-        GLubyte *uniforms;
-        GLint block_size;
-        GLuint ubo;
-        GLuint indices[NUM_UNIFORMS];
-        GLuint offset[NUM_UNIFORMS];
-        GLubyte *mem;
-        GLuint index;
-        char *names[NUM_UNIFORMS];
-    } uniforms_buffer_object;
-    GLfloat ants_pos[SIZE_ELEM * NUM_ANTS];
-    ant ants[NUM_ANTS];
-} state_t;
 
 static void error_callback (int error, const char *description);
 
@@ -106,7 +47,7 @@ void print_uniforms (GLuint program);
 
 void framebuffer_size_callback (GLFWwindow *window, int width, int height);
 
-static state_t state;
+state_t state;
 
 GLuint create_texture_2d ();
 GLuint create_framebuffer (GLuint texture);
@@ -119,6 +60,15 @@ void opengl_error_callback (GLenum source,
     GLsizei length,
     const GLchar *message,
     const void *user_param);
+
+void swap_ant_buffers (void)
+{
+    state.swapping_buffers = true;
+    GLfloat (*const tmp)[SIZE_ELEM * NUM_ANTS] = state.ants_pos_write;
+    state.ants_pos_write = state.ants_pos_read;
+    state.ants_pos_read = tmp;
+    state.swapping_buffers = false;
+}
 
 int backend_init (void)
 {
@@ -223,7 +173,10 @@ int backend_init (void)
     {
         LOG (LOG_INFO, "Generating particles\n");
         srand (time (NULL));
-        memset (state.ants_pos, 0, sizeof (state.ants_pos));
+        state.ants_pos_read = &state.ants_pos_a;
+        state.ants_pos_write = &state.ants_pos_b;
+        memset (*state.ants_pos_read, 0, sizeof (state.ants_pos_a));
+        memset (*state.ants_pos_write, 0, sizeof (state.ants_pos_b));
 
         quad_member_type minx = DBL_MAX;
         quad_member_type miny = DBL_MAX;
@@ -238,8 +191,8 @@ int backend_init (void)
             const GLfloat y = sinf (r);
             GLfloat x_pos = 1.0f / 2.0f + x * d;
             GLfloat y_pos = 1.0f / 2.0f + y * d;
-            state.ants_pos[i + 0] = x_pos;
-            state.ants_pos[i + 1] = y_pos;
+            (*state.ants_pos_write)[i + 0] = x_pos;
+            (*state.ants_pos_write)[i + 1] = y_pos;
             if (x_pos < minx)
             {
                 minx = x_pos;
@@ -268,8 +221,10 @@ int backend_init (void)
         state.map_size[2] = maxx;
         state.map_size[3] = maxy;
     }
-    state.ssbo = create_ssbo (
-        state.ants_pos, sizeof (state.ants_pos), GL_DYNAMIC_STORAGE_BIT);
+    // special case: read from write buffer
+    state.ssbo = create_ssbo (*state.ants_pos_write,
+        sizeof (*state.ants_pos_write),
+        GL_DYNAMIC_STORAGE_BIT);
     {
         int i = 0;
         {
@@ -313,8 +268,7 @@ int backend_init (void)
     state.current_map_is_a = true;
     for (int i = 0; i < NUM_ANTS; i++)
     {
-        state.ants[i].x = &state.ants_pos[i * SIZE_ELEM];
-        state.ants[i].y = &state.ants_pos[i * SIZE_ELEM + 1];
+        state.ants[i].pos_index = i;
         state.ants[i].vx = 0.0;
         state.ants[i].vy = 0.0;
         state.ants[i].fx = 0;
@@ -338,6 +292,8 @@ int backend_init (void)
     nk_glfw3_font_stash_begin (&atlas);
     nk_glfw3_font_stash_end ();
 #endif
+    swap_ant_buffers ();
+    state.ant_buffer_ready = true;
     state.time = 0;
     LOG (LOG_INFO, "finished init\n");
     return 0;
@@ -387,6 +343,7 @@ GLFWwindow *init_glfw (void)
 
 void draw (void)
 {
+    static GLfloat view_map_size[4] = { 0, 0, 0, 0 };
     glBindFramebuffer (GL_FRAMEBUFFER, 0);
     glClearColor (0.0f, 1.0f, 1.0f, 1.0f);
     glClear (GL_COLOR_BUFFER_BIT);
@@ -397,22 +354,34 @@ void draw (void)
         state.uniforms_buffer_object.ubo);
     glBindBufferBase (GL_SHADER_STORAGE_BUFFER, 1, state.ssbo);
     state.time++;
+    if (state.ant_buffer_ready)
+    {
+        state.ant_buffer_ready = false;
+        view_map_size[0] = state.main_quad.x - state.main_quad.width.half;
+        view_map_size[2] = state.main_quad.x + state.main_quad.width.half;
+        view_map_size[1] = state.main_quad.y - state.main_quad.height.half;
+        view_map_size[3] = state.main_quad.y + state.main_quad.height.half;
+        while (state.swapping_buffers)
+        {
+        }
+        const GLfloat *data = *state.ants_pos_read;
+        glBufferSubData (GL_SHADER_STORAGE_BUFFER,
+            0,
+            SIZE_ELEM * NUM_ANTS * sizeof (GLfloat),
+            data);
+    }
     memcpy (state.uniforms_buffer_object.mem
                 + state.uniforms_buffer_object.offset[TIME_UNIFORM_INDEX],
         &state.time,
         sizeof (GLint));
     memcpy (state.uniforms_buffer_object.mem
                 + state.uniforms_buffer_object.offset[MAP_SIZE_INDEX],
-        state.map_size,
+        view_map_size,
         4 * sizeof (GLfloat));
     glBufferSubData (GL_UNIFORM_BUFFER,
         0,
         state.uniforms_buffer_object.block_size,
         state.uniforms_buffer_object.mem);
-    glBufferSubData (GL_SHADER_STORAGE_BUFFER,
-        0,
-        SIZE_ELEM * NUM_ANTS * sizeof (GLfloat),
-        state.ants_pos);
     glBindVertexArray (state.point_vx_data.VAO);
     glViewport (0, 0, MAP_WIDTH, MAP_HEIGHT);
     glUseProgram (state.shader_map);
@@ -458,6 +427,8 @@ void draw (void)
 
 void update (void)
 {
+    for (int iterations = 0; iterations < 1; iterations++)
+    {
 #if 0
     for (int i = 0; i < NUM_ANTS; i++)
     {
@@ -470,47 +441,24 @@ void update (void)
                 continue;
             }
             const ant *b = &state.ants[j];
-            apply_force (&state.ants[i], *b->x, *b->y, b->w);
-        }
-    }
-    for (auto i = 0; i < NUM_ANTS; i++)
-    {
-        ant *v = &state.ants[i];
-        update_ant (v);
-    }
-#else
-    /*LOG (LOG_INFO,
-        "width: %f - %f\n",
-        state.main_quad.width.full,
-        state.main_quad.height.full);*/
-    arena_reset (&state.arena);
-    bh_tree tree;
-    bh_tree_init (&tree, &state.main_quad, &state.arena);
-    for (int i = 0; i < NUM_ANTS; i++)
-    {
-        if (quad_contains (&tree.quad, *state.ants[i].x, *state.ants[i].y))
-        {
-            bh_tree_insert (&tree, &state.ants[i]);
+            const int index = 2 * b->pos_index;
+            apply_force (&state.ants[i],
+                (*state.ants_pos_read)[index],
+                (*state.ants_pos_read)[index + 1],
+                b->w);
         }
     }
     quad_member_type minx = DBL_MAX;
     quad_member_type miny = DBL_MAX;
     quad_member_type maxx = DBL_MIN;
     quad_member_type maxy = DBL_MIN;
-    int i;
-#pragma omp parallel for default(none) reduction(min : minx, miny)            \
-    reduction(max : maxx, maxy) shared(state, tree)
-    for (i = 0; i < NUM_ANTS; i++)
+    for (int i = 0; i < NUM_ANTS; i++)
     {
-        state.ants[i].fx = 0;
-        state.ants[i].fy = 0;
-        if (quad_contains (&tree.quad, *state.ants[i].x, *state.ants[i].y))
-        {
-            bh_tree_apply_force (&tree, &state.ants[i]);
-        }
-        update_ant (&state.ants[i]);
-        const quad_member_type x_pos = *state.ants[i].x;
-        const quad_member_type y_pos = *state.ants[i].y;
+        ant *v = &state.ants[i];
+        update_ant (v);
+        const int index = 2 * state.ants[i].pos_index;
+        const quad_member_type x_pos = (*state.ants_pos_write)[index];
+        const quad_member_type y_pos = (*state.ants_pos_write)[index + 1];
         minx = x_pos < minx ? x_pos : minx;
         maxx = x_pos <= maxx ? maxx : x_pos;
         miny = y_pos < miny ? y_pos : miny;
@@ -526,8 +474,65 @@ void update (void)
     state.map_size[1] = miny;
     state.map_size[2] = maxx;
     state.map_size[3] = maxy;
-    arena_free (&state.arena);
+#else
+        /*LOG (LOG_INFO,
+            "width: %f - %f\n",
+            state.main_quad.width.full,
+            state.main_quad.height.full);*/
+        arena_reset (&state.arena);
+        bh_tree tree;
+        bh_tree_init (&tree, &state.main_quad, &state.arena);
+        for (int i = 0; i < NUM_ANTS; i++)
+        {
+            const int index = 2 * state.ants[i].pos_index;
+            if (quad_contains (&tree.quad,
+                    (*state.ants_pos_read)[index],
+                    (*state.ants_pos_read)[index + 1]))
+            {
+                bh_tree_insert (&tree, &state.ants[i]);
+            }
+        }
+        quad_member_type minx = DBL_MAX;
+        quad_member_type miny = DBL_MAX;
+        quad_member_type maxx = DBL_MIN;
+        quad_member_type maxy = DBL_MIN;
+        int i;
+#pragma omp parallel for default(none) reduction(min : minx, miny)            \
+    reduction(max : maxx, maxy) shared(state, tree)
+        for (i = 0; i < NUM_ANTS; i++)
+        {
+            state.ants[i].fx = 0;
+            state.ants[i].fy = 0;
+            const int index = 2 * state.ants[i].pos_index;
+            if (quad_contains (&tree.quad,
+                    (*state.ants_pos_read)[index],
+                    (*state.ants_pos_read)[index + 1]))
+            {
+                bh_tree_apply_force (&tree, &state.ants[i]);
+            }
+            update_ant (&state.ants[i]);
+            const quad_member_type x_pos = (*state.ants_pos_write)[index];
+            const quad_member_type y_pos = (*state.ants_pos_write)[index + 1];
+            minx = x_pos < minx ? x_pos : minx;
+            maxx = x_pos <= maxx ? maxx : x_pos;
+            miny = y_pos < miny ? y_pos : miny;
+            maxy = y_pos <= maxy ? maxy : y_pos;
+        }
+        state.main_quad.width.full = maxx - minx;
+        state.main_quad.width.half = state.main_quad.width.full / 2.0f;
+        state.main_quad.height.full = maxy - miny;
+        state.main_quad.height.half = state.main_quad.height.full / 2.0f;
+        state.main_quad.x = minx + state.main_quad.width.half;
+        state.main_quad.y = miny + state.main_quad.height.half;
+        state.map_size[0] = minx;
+        state.map_size[1] = miny;
+        state.map_size[2] = maxx;
+        state.map_size[3] = maxy;
+        arena_free (&state.arena);
 #endif
+        swap_ant_buffers ();
+    }
+    state.ant_buffer_ready = true;
 }
 
 GLFWwindow *backend_get_window (void) { return state.window; }

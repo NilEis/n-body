@@ -5,12 +5,13 @@
 static void bh_tree_add_body (bh_tree *restrict tree, const ant *restrict v)
 {
     const float combined_mass = tree->node_body.mass + v->w;
-    tree->node_body.x
-        = (tree->node_body.x * tree->node_body.mass + *v->x * v->w)
-        / combined_mass;
-    tree->node_body.y
-        = (tree->node_body.y * tree->node_body.mass + *v->y * v->w)
-        / combined_mass;
+    const int index = 2 * v->pos_index;
+    tree->node_body.x = (tree->node_body.x * tree->node_body.mass
+                            + (*state.ants_pos_read)[index] * v->w)
+                      / combined_mass;
+    tree->node_body.y = (tree->node_body.y * tree->node_body.mass
+                            + (*state.ants_pos_read)[index + 1] * v->w)
+                      / combined_mass;
     tree->node_body.mass = combined_mass;
 }
 
@@ -84,9 +85,10 @@ void bh_tree_insert (bh_tree *restrict tree, const ant *restrict v)
 {
     if (!tree->node_body.active)
     {
+        const int index = 2 * v->pos_index;
         tree->node_body.active = true;
-        tree->node_body.x = *v->x;
-        tree->node_body.y = *v->y;
+        tree->node_body.x = (*state.ants_pos_read)[index];
+        tree->node_body.y = (*state.ants_pos_read)[index + 1];
         tree->node_body.mass = v->w;
     }
     else if (!bh_tree_is_leaf (tree))
@@ -95,7 +97,10 @@ void bh_tree_insert (bh_tree *restrict tree, const ant *restrict v)
         if (tree->quad.width.half > TREE_EPSILON
             && tree->quad.height.half > TREE_EPSILON)
         {
-            bh_tree *sub_tree = bh_tree_split (tree, *v->x, *v->y);
+            const int index = 2 * v->pos_index;
+            bh_tree *sub_tree = bh_tree_split (tree,
+                (*state.ants_pos_read)[index],
+                (*state.ants_pos_read)[index + 1]);
             bh_tree_insert (sub_tree, v);
         }
     }
@@ -117,21 +122,27 @@ static float dist (
 int bh_tree_apply_force (const bh_tree *restrict tree, ant *restrict v)
 {
     const double THETA = 2.25;
+    const int index = 2 * v->pos_index;
     if (bh_tree_is_leaf (tree))
     {
-        if (tree->node_body.x != *v->x && tree->node_body.y != *v->y)
+        if (tree->node_body.x != (*state.ants_pos_read)[index]
+            && tree->node_body.y != (*state.ants_pos_read)[index + 1])
         {
             apply_force (
                 v, tree->node_body.x, tree->node_body.y, tree->node_body.mass);
         }
     }
     else if (tree->quad.width.full
-                     / dist (
-                         *v->x, *v->x, tree->node_body.x, tree->node_body.x)
+                     / dist ((*state.ants_pos_read)[index],
+                         (*state.ants_pos_read)[index],
+                         tree->node_body.x,
+                         tree->node_body.x)
                  < THETA
              && tree->quad.height.full
-                        / dist (
-                            *v->y, *v->y, tree->node_body.y, tree->node_body.y)
+                        / dist ((*state.ants_pos_read)[index + 1],
+                            (*state.ants_pos_read)[index + 1],
+                            tree->node_body.y,
+                            tree->node_body.y)
                     < THETA)
     {
         apply_force (

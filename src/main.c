@@ -7,6 +7,14 @@ static struct
     double last_frame;
 } delta_time = { 0 };
 
+THREAD_FUNCTION (update_wrapper)
+{
+    while (1)
+    {
+            update ();
+    }
+}
+
 int main ()
 {
     if (backend_init () == -1)
@@ -18,20 +26,17 @@ int main ()
         update ();
     }
     GLFWwindow *window = backend_get_window ();
+    thread t = thread_create (update_wrapper, NULL);
     while (!glfwWindowShouldClose (window))
     {
-        bool speed_up = glfwGetKey (window, GLFW_KEY_SPACE) == GLFW_PRESS;
         draw ();
-        for (int i = 0; i < (speed_up ? 20 : 1); i++)
-        {
-            update ();
-        }
         glfwPollEvents ();
         if (glfwGetKey (window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         {
             break;
         }
     }
+    thread_stop (t);
 
     backend_deinit ();
     return 0;
