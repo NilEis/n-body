@@ -84,7 +84,7 @@ typedef struct
     glsl_pos_type (*ants_pos_write)[POS_ARRAY_LENGTH];
     ant ants[NUM_ANTS];
     bool swapping_buffers;
-    bool ant_buffer_ready;
+    volatile bool ant_buffer_ready;
 } state_t;
 
 #endif // STATE_H
