@@ -13,8 +13,10 @@ set(${PROJECT_NAME}_libs_to_link Threads::Threads)
 
 set(${PROJECT_NAME}_defines)
 
+set(${PROJECT_NAME}_comp_options)
+
 if (CMAKE_USE_PTHREADS_INIT)
-    #list(APPEND ${PROJECT_NAME}_defines -DPTHREAD_FOUND=1)
+    list(APPEND ${PROJECT_NAME}_defines -DPTHREAD_FOUND=1)
 endif (CMAKE_USE_PTHREADS_INIT)
 
 set(OpenMP_RUNTIME_MSVC llvm)
@@ -57,7 +59,7 @@ cpmaddpackage(
         DOWNLOAD_ONLY
         YES)
 
-list(APPEND libraries glfw glad_gl_core_45)
+list(APPEND ${PROJECT_NAME}_libs_to_link glfw glad_gl_core_45)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake)
 
@@ -89,8 +91,14 @@ file(GLOB HEADER_FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h ${CMAKE_CURRENT_B
 target_precompile_headers(${PROJECT_NAME} PRIVATE ${HEADER_FILES})
 
 if (MSVC)
-    SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/PROFILE")
+    set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/PROFILE")
 endif (MSVC)
+
+if (CMAKE_COMPILER_IS_GNUCC)
+    list(APPEND ${PROJECT_NAME}_comp_options -mtune=native -march=native)
+endif (CMAKE_COMPILER_IS_GNUCC)
+
+list(APPEND ${PROJECT_NAME}_comp_options ${OpenMP_C_FLAGS})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include/
@@ -98,9 +106,11 @@ target_include_directories(${PROJECT_NAME} PRIVATE
         ${arena_SOURCE_DIR}/
         ${nuklear_SOURCE_DIR}/)
 
-target_link_libraries(${PROJECT_NAME} ${libraries})
+target_link_libraries(${PROJECT_NAME} ${${PROJECT_NAME}_libs_to_link})
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${${PROJECT_NAME}_defines})
+
+target_compile_options(${PROJECT_NAME} PRIVATE ${${PROJECT_NAME}_comp_options})
 
 set_property(TARGET ${PROJECT_NAME} PROPERTY C_STANDARD 17)
 

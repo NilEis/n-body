@@ -27,7 +27,7 @@ GLuint compile_shader (const char *src, const char *name, const GLenum type)
         }
     }
     const char *srcs[] = { version_str,
-        "\n",
+        "\n#define INCLUDED_FROM_GLSL_CODE 1\n",
         shader_defines_h,
         "\n",
         shader_shader_includes_glsl,

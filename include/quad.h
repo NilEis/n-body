@@ -27,11 +27,11 @@ typedef struct
     quad_length height;
 } quad;
 
-bool quad_contains (const quad *q, float x, float y);
+bool quad_contains (const quad *q, double x, double y);
 
 void quad_subdivide (
     const quad *restrict q, quad_quadrant quadrant, quad *restrict out);
 
-quad_quadrant quad_get_quadrant (const quad *restrict q, float x, float y);
+quad_quadrant quad_get_quadrant (const quad *restrict q, double x, double y);
 
 #endif // QUADTREE_H

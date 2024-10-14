@@ -10,12 +10,12 @@ layout(location = 0) in vec3 in_pos;
 #include "./shader_includes.glsl"
 #endif//SHADER_INCLUDES_GLSL
 
-float normalize_value(float x, vec2 range)
+double normalize_value(double x, dvec2 range)
 {
     return 2.0*((x - range.x) / (range.y - range.x))-1.0;
 }
 
-vec2 normalize_value(vec2 x, vec4 range)
+vec2 normalize_value(dvec2 x, dvec4 range)
 {
     return vec2(normalize_value(x.x, range.xz), normalize_value(x.y, range.yw));
 }

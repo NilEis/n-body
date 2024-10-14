@@ -2,6 +2,12 @@
 
 #include <stdlib.h>
 
+static int bh_tree_get_depth_rec (const bh_tree *tree);
+static int bh_tree_get_num_nodes_rec (const bh_tree *tree);
+static void bh_tree_add_body (bh_tree *restrict tree, const ant *restrict v);
+static void bh_tree_insert_body (
+    bh_tree *restrict tree, const body *restrict v);
+
 static void bh_tree_add_body (bh_tree *restrict tree, const ant *restrict v)
 {
     const float combined_mass = tree->node_body.mass + v->w;
@@ -81,7 +87,7 @@ static bh_tree *bh_tree_split (bh_tree *tree, float x, float y)
     return *quad_tree;
 }
 
-void bh_tree_insert (bh_tree *restrict tree, const ant *restrict v)
+void bh_tree_insert (bh_tree *restrict tree, const ant *restrict v, int d)
 {
     if (!tree->node_body.active)
     {
@@ -94,14 +100,15 @@ void bh_tree_insert (bh_tree *restrict tree, const ant *restrict v)
     else if (!bh_tree_is_leaf (tree))
     {
         bh_tree_add_body (tree, v);
-        if (tree->quad.width.half > TREE_EPSILON
-            && tree->quad.height.half > TREE_EPSILON)
+        if (d < TREE_MAX_DEPTH
+            && (tree->quad.width.half > TREE_EPSILON
+                && tree->quad.height.half > TREE_EPSILON))
         {
             const int index = 2 * v->pos_index;
             bh_tree *sub_tree = bh_tree_split (tree,
                 (*state.ants_pos_read)[index],
                 (*state.ants_pos_read)[index + 1]);
-            bh_tree_insert (sub_tree, v);
+            bh_tree_insert (sub_tree, v, d + 1);
         }
     }
     else
@@ -109,7 +116,7 @@ void bh_tree_insert (bh_tree *restrict tree, const ant *restrict v)
         bh_tree *sub_tree
             = bh_tree_split (tree, tree->node_body.x, tree->node_body.y);
         bh_tree_insert_body (sub_tree, &tree->node_body);
-        bh_tree_insert (tree, v);
+        bh_tree_insert (tree, v, d + 1);
     }
 }
 
@@ -167,4 +174,83 @@ int bh_tree_apply_force (const bh_tree *restrict tree, ant *restrict v)
             bh_tree_apply_force (tree->SE, v);
         }
     }
+}
+
+static int bh_tree_get_depth_rec (const bh_tree *tree)
+{
+    if (tree == NULL)
+    {
+        return 0;
+    }
+    if (bh_tree_is_leaf (tree))
+    {
+        return 1;
+    }
+    int res = 0;
+    OPENMP_PRAGMA (omp parallel sections reduction (max : res))
+    {
+        OPENMP_PRAGMA (omp section)
+        {
+            const int tmp = bh_tree_get_depth_rec (tree->NE);
+            res = res < tmp ? tmp : res;
+        }
+        OPENMP_PRAGMA (omp section)
+        {
+            const int tmp = bh_tree_get_depth_rec (tree->NW);
+            res = res < tmp ? tmp : res;
+        }
+        OPENMP_PRAGMA (omp section)
+        {
+            const int tmp = bh_tree_get_depth_rec (tree->SE);
+            res = res < tmp ? tmp : res;
+        }
+        OPENMP_PRAGMA (omp section)
+        {
+            const int tmp = bh_tree_get_depth_rec (tree->SW);
+            res = res < tmp ? tmp : res;
+        }
+    }
+    return 1 + res;
+}
+
+int bh_tree_get_num_nodes_rec (const bh_tree *tree)
+{
+    if(tree == NULL)
+    {
+        return 0;
+    }
+    if(bh_tree_is_leaf (tree))
+    {
+        return 1;
+    }
+    int res = 0;
+    OPENMP_PRAGMA (omp parallel sections reduction (+ : res))
+    {
+        OPENMP_PRAGMA (omp section)
+        {
+            res += bh_tree_get_depth_rec (tree->NE);
+        }
+        OPENMP_PRAGMA (omp section)
+        {
+            res += bh_tree_get_depth_rec (tree->NW);
+        }
+        OPENMP_PRAGMA (omp section)
+        {
+            res += bh_tree_get_depth_rec (tree->SE);
+        }
+        OPENMP_PRAGMA (omp section)
+        {
+            res += bh_tree_get_depth_rec (tree->SW);
+        }
+    }
+    return res;
+}
+
+int bh_tree_get_depth (const bh_tree *tree)
+{
+    return bh_tree_get_depth_rec (tree);
+}
+int bh_tree_get_num_nodes (const bh_tree *tree)
+{
+    return bh_tree_get_num_nodes_rec (tree);
 }

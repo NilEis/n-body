@@ -17,7 +17,19 @@
 #define GRAVITATIONAL_CONSTANT 6.67E-11
 #define EPSILON 1E4
 #define TREE_EPSILON 0.0001
+#define TREE_MAX_DEPTH 30
 
 #define MACRO_SQUARED_DIST(a, b) ((a) * (a) + (b) * (b))
+
+#ifndef INCLUDED_FROM_GLSL_CODE
+
+#define USE_OPENMP 1
+#if USE_OPENMP
+#define OPENMP_PRAGMA(x) _Pragma (#x)
+#else
+#define OPENMP_PRAGMA(x)
+#endif
+
+#endif
 
 #endif // DEFINES_H

@@ -11,7 +11,7 @@ THREAD_FUNCTION (update_wrapper)
 {
     while (1)
     {
-            update ();
+        update ();
     }
 }
 
@@ -21,12 +21,8 @@ int main ()
     {
         return 1;
     }
-    for (int i = 0; i < 0; i++)
-    {
-        update ();
-    }
     GLFWwindow *window = backend_get_window ();
-    thread t = thread_create (update_wrapper, NULL);
+    const thread t = thread_create (update_wrapper, NULL);
     while (!glfwWindowShouldClose (window))
     {
         draw ();

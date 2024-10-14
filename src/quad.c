@@ -1,6 +1,6 @@
 ﻿#include "quad.h"
 
-bool quad_contains (const quad *q, const float x, const float y)
+bool quad_contains (const quad *q, double x, double y)
 {
     if (x <= q->x + q->width.half && x >= q->x - q->width.half
         && y <= q->y + q->height.half && y >= q->y - q->height.half)
@@ -38,7 +38,7 @@ void quad_subdivide (
     }
 }
 
-quad_quadrant quad_get_quadrant (const quad *restrict q, float x, float y)
+quad_quadrant quad_get_quadrant (const quad *restrict q, double x, double y)
 {
     if (x < q->x)
     {

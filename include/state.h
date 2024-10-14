@@ -10,6 +10,8 @@
 
 #define POS_ARRAY_LENGTH (SIZE_ELEM * NUM_ANTS)
 
+typedef GLdouble glsl_pos_type;
+
 typedef struct
 {
     int pos_index;
@@ -61,8 +63,8 @@ typedef struct
     int render_passes_n;
     vertex_data_t vertex_data;
     vertex_data_t point_vx_data;
-    GLfloat size[2];
-    GLfloat map_size[4];
+    glsl_pos_type size[2];
+    glsl_pos_type map_size[4];
     struct
     {
         GLubyte *uniforms;
@@ -74,10 +76,10 @@ typedef struct
         GLuint index;
         char *names[NUM_UNIFORMS];
     } uniforms_buffer_object;
-    GLfloat ants_pos_a[POS_ARRAY_LENGTH];
-    GLfloat ants_pos_b[POS_ARRAY_LENGTH];
-    GLfloat (*ants_pos_read)[POS_ARRAY_LENGTH];
-    GLfloat (*ants_pos_write)[POS_ARRAY_LENGTH];
+    glsl_pos_type ants_pos_a[POS_ARRAY_LENGTH];
+    glsl_pos_type ants_pos_b[POS_ARRAY_LENGTH];
+    glsl_pos_type (*ants_pos_read)[POS_ARRAY_LENGTH];
+    glsl_pos_type (*ants_pos_write)[POS_ARRAY_LENGTH];
     ant ants[NUM_ANTS];
     bool swapping_buffers;
     bool ant_buffer_ready;
