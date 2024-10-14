@@ -1,6 +1,7 @@
 #version 450 core
 
 layout(location = 0) in vec3 in_pos;
+out vec3 col;
 
 #ifndef DEFINES_H
 #include "../include/defines.h"
@@ -21,6 +22,14 @@ vec2 normalize_value(dvec2 x, dvec4 range)
 }
 
 void main() {
+    if (gl_InstanceID==0)
+    {
+        col = vec3(1.0);
+    }
+    else
+    {
+        col = vec3(1.0);
+    }
     vec3 p = in_pos + vec3(ants[gl_InstanceID].xy, 0.0);
     p.xy = normalize_value(p.xy, map_size);
     gl_Position = vec4(p, 1.0);

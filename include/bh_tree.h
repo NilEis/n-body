@@ -35,6 +35,7 @@ int bh_tree_apply_force (const bh_tree *restrict tree, ant *restrict v);
 
 int bh_tree_get_depth (const bh_tree *tree);
 int bh_tree_get_num_nodes (const bh_tree *tree);
+void bh_tree_print (const bh_tree *tree);
 
 extern state_t state;
 

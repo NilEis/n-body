@@ -76,8 +76,10 @@ typedef struct
         GLuint index;
         char *names[NUM_UNIFORMS];
     } uniforms_buffer_object;
+#pragma pack(8)
     glsl_pos_type ants_pos_a[POS_ARRAY_LENGTH];
     glsl_pos_type ants_pos_b[POS_ARRAY_LENGTH];
+#pragma pack(n)
     glsl_pos_type (*ants_pos_read)[POS_ARRAY_LENGTH];
     glsl_pos_type (*ants_pos_write)[POS_ARRAY_LENGTH];
     ant ants[NUM_ANTS];

@@ -15,9 +15,9 @@
 
 #define UNIVERSE_SIZE 1e8
 #define GRAVITATIONAL_CONSTANT 6.67E-11
-#define EPSILON 1E4
-#define TREE_EPSILON 0.0001
-#define TREE_MAX_DEPTH 30
+#define EPSILON 1.5E3
+#define TREE_EPSILON 0.00001
+#define TREE_MAX_DEPTH 40
 
 #define MACRO_SQUARED_DIST(a, b) ((a) * (a) + (b) * (b))
 

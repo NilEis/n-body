@@ -1,6 +1,7 @@
 #version 450 core
 
 layout(location = 0) out vec4 FragColor;
+in vec3 col;
 
 #ifndef DEFINES_H
 #include "../include/defines.h"
@@ -11,5 +12,5 @@ layout(location = 0) out vec4 FragColor;
 #endif//SHADER_INCLUDES_GLSL
 
 void main() {
-    FragColor = vec4(1.0);
+    FragColor = vec4(col, 1.0);
 }

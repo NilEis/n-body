@@ -7,6 +7,7 @@ static int bh_tree_get_num_nodes_rec (const bh_tree *tree);
 static void bh_tree_add_body (bh_tree *restrict tree, const ant *restrict v);
 static void bh_tree_insert_body (
     bh_tree *restrict tree, const body *restrict v);
+static void bh_tree_print_rec (const bh_tree *tree, int d, FILE *f);
 
 static void bh_tree_add_body (bh_tree *restrict tree, const ant *restrict v)
 {
@@ -215,11 +216,11 @@ static int bh_tree_get_depth_rec (const bh_tree *tree)
 
 int bh_tree_get_num_nodes_rec (const bh_tree *tree)
 {
-    if(tree == NULL)
+    if (tree == NULL)
     {
         return 0;
     }
-    if(bh_tree_is_leaf (tree))
+    if (bh_tree_is_leaf (tree))
     {
         return 1;
     }
@@ -253,4 +254,45 @@ int bh_tree_get_depth (const bh_tree *tree)
 int bh_tree_get_num_nodes (const bh_tree *tree)
 {
     return bh_tree_get_num_nodes_rec (tree);
+}
+
+static void bh_tree_print_rec (const bh_tree *tree, int d, FILE *f)
+{
+    if (tree == NULL)
+    {
+        return;
+    }
+    for (int i = 0; i < d; i++)
+    {
+        fprintf (f, "  ");
+    }
+    if (tree->NE != NULL)
+    {
+        fprintf (f, "n%p -> n%p\n", tree, tree->NE);
+        bh_tree_print_rec (tree->NE, d + 1, f);
+    }
+    if (tree->NW != NULL)
+    {
+        fprintf (f, "n%p -> n%p\n", tree, tree->NW);
+        bh_tree_print_rec (tree->NW, d + 1, f);
+    }
+    if (tree->SE != NULL)
+    {
+        fprintf (f, "n%p -> n%p\n", tree, tree->SE);
+        bh_tree_print_rec (tree->SE, d + 1, f);
+    }
+    if (tree->SW != NULL)
+    {
+        fprintf (f, "n%p -> n%p\n", tree, tree->SW);
+        bh_tree_print_rec (tree->SW, d + 1, f);
+    }
+}
+
+void bh_tree_print (const bh_tree *tree)
+{
+    FILE *f = fopen ("tree.dot", "w");
+    fprintf (f, "digraph {\n");
+    bh_tree_print_rec (tree, 1, f);
+    fprintf (f, "}\n");
+    fclose (f);
 }

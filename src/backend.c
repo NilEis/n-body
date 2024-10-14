@@ -359,10 +359,13 @@ void draw (void)
     state.time++;
     if (state.ant_buffer_ready)
     {
-        view_map_size[0] = state.main_quad.x - state.main_quad.width.half;
-        view_map_size[2] = state.main_quad.x + state.main_quad.width.half;
-        view_map_size[1] = state.main_quad.y - state.main_quad.height.half;
-        view_map_size[3] = state.main_quad.y + state.main_quad.height.half;
+        if (view_map_size[0] == 0)
+        {
+            view_map_size[0] = state.main_quad.x - state.main_quad.width.half;
+            view_map_size[2] = state.main_quad.x + state.main_quad.width.half;
+            view_map_size[1] = state.main_quad.y - state.main_quad.height.half;
+            view_map_size[3] = state.main_quad.y + state.main_quad.height.half;
+        }
         while (state.swapping_buffers)
         {
         }
@@ -534,10 +537,11 @@ state.map_size[0] = minx;
 state.map_size[1] = miny;
 state.map_size[2] = maxx;
 state.map_size[3] = maxy;
-/*LOG (LOG_INFO,
+LOG (LOG_INFO,
     "Tree depth: %d  -- num nodes: %d\n",
     bh_tree_get_depth (&tree),
-    bh_tree_get_num_nodes (&tree));*/
+    bh_tree_get_num_nodes (&tree));
+// bh_tree_print (&tree);
 arena_free (&state.arena);
 #endif
 swap_ant_buffers ();
