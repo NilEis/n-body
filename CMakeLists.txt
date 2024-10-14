@@ -88,7 +88,7 @@ set(SHADER_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/shader)
 
 file(GLOB HEADER_FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h ${CMAKE_CURRENT_BINARY_DIR}/generated/include/*.h)
 
-target_precompile_headers(${PROJECT_NAME} PRIVATE ${HEADER_FILES})
+#target_precompile_headers(${PROJECT_NAME} PRIVATE ${HEADER_FILES})
 
 if (MSVC)
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/PROFILE")

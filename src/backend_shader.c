@@ -1,6 +1,7 @@
 ﻿#include "backend_shader.h"
 #include "log.h"
 
+#include "shader.h"
 #include <assert.h>
 #include <stdarg.h>
 #include <stdlib.h>

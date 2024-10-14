@@ -4,7 +4,7 @@
 #include "glad/gl.h"
 #include "log.h"
 #include "shader.h"
-#include "state.h"
+#include "bh_tree.h"
 
 #include <assert.h>
 #include <fenv.h>
@@ -330,10 +330,11 @@ GLFWwindow *init_glfw (void)
     glfwWindowHint (GLFW_GREEN_BITS, mode->greenBits);
     glfwWindowHint (GLFW_BLUE_BITS, mode->blueBits);
     glfwWindowHint (GLFW_REFRESH_RATE, mode->refreshRate);
-    state.size[0] = mode->width;
-    state.size[1] = mode->height;
+    state.size[0] = WINDOW_WIDTH;
+    state.size[1] = WINDOW_HEIGHT;
     GLFWwindow *window = glfwCreateWindow (
-        mode->width, mode->height, "N-Body", monitor, NULL);
+        WINDOW_WIDTH, WINDOW_HEIGHT, "N-Body", 0, NULL);/*glfwCreateWindow (
+        mode->width, mode->height, "N-Body", monitor, NULL);*/
     glfwMakeContextCurrent (window);
     glfwSetFramebufferSizeCallback (window, framebuffer_size_callback);
     if (!window)
@@ -359,7 +360,7 @@ void draw (void)
     state.time++;
     if (state.ant_buffer_ready)
     {
-        if (view_map_size[0] == 0)
+
         {
             view_map_size[0] = state.main_quad.x - state.main_quad.width.half;
             view_map_size[2] = state.main_quad.x + state.main_quad.width.half;
@@ -537,10 +538,10 @@ state.map_size[0] = minx;
 state.map_size[1] = miny;
 state.map_size[2] = maxx;
 state.map_size[3] = maxy;
-LOG (LOG_INFO,
+/*LOG (LOG_INFO,
     "Tree depth: %d  -- num nodes: %d\n",
     bh_tree_get_depth (&tree),
-    bh_tree_get_num_nodes (&tree));
+    bh_tree_get_num_nodes (&tree));*/
 // bh_tree_print (&tree);
 arena_free (&state.arena);
 #endif
