@@ -1,6 +1,8 @@
 #include "backend.h"
 #include "thread_creator.h"
 
+#include <stdlib.h>
+
 static struct
 {
     double dt;
@@ -9,6 +11,7 @@ static struct
 
 THREAD_FUNCTION (update_wrapper)
 {
+    //_sleep (5000);
     while (1)
     {
         update ();

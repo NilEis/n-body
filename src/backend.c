@@ -1,10 +1,10 @@
 #include "backend.h"
 #include "backend_shader.h"
+#include "bh_tree.h"
 #include "defines.h"
 #include "glad/gl.h"
 #include "log.h"
 #include "shader.h"
-#include "bh_tree.h"
 
 #include <assert.h>
 #include <fenv.h>
@@ -266,20 +266,21 @@ int backend_init (void)
         INTERNAL_TEXTURE_FORMAT);
     state.active_framebuffer = state.map_b_framebuffer;
     state.current_map_is_a = true;
-    const double sol_mass = 1.5E16;
+    const double sol_mass = 1E14;
     for (int i = 0; i < NUM_ANTS; i++)
     {
         state.ants[i].pos_index = i;
         const glsl_pos_type x = (*state.ants_pos_write)[i + 0];
         const glsl_pos_type y = (*state.ants_pos_write)[i + 1];
-        state.ants[i].vx = 0;
-        state.ants[i].vy = 0;
+        const double r = rand();
+        state.ants[i].vx = sin (r) * 200.0 - 100.0;
+        state.ants[i].vy = cos (r) * 200.0 - 100.0;
         state.ants[i].fx = 0;
         state.ants[i].fy = 0;
         state.ants[i].w
             = (0.25 + ((rand () / (double)RAND_MAX) * 0.75)) * sol_mass;
     }
-    state.ants[0].w = sol_mass;
+    state.ants[0].w = 10 * sol_mass;
     state.ants[0].vx = 0;
     state.ants[0].vy = 0;
     state.ants[NUM_ANTS / 2].w = 2 * sol_mass;
@@ -332,9 +333,9 @@ GLFWwindow *init_glfw (void)
     glfwWindowHint (GLFW_REFRESH_RATE, mode->refreshRate);
     state.size[0] = WINDOW_WIDTH;
     state.size[1] = WINDOW_HEIGHT;
-    GLFWwindow *window = glfwCreateWindow (
-        WINDOW_WIDTH, WINDOW_HEIGHT, "N-Body", 0, NULL);/*glfwCreateWindow (
-        mode->width, mode->height, "N-Body", monitor, NULL);*/
+    GLFWwindow *window = /*glfwCreateWindow (
+        WINDOW_WIDTH, WINDOW_HEIGHT, "N-Body", 0, NULL);*/
+        glfwCreateWindow (mode->width, mode->height, "N-Body", monitor, NULL);
     glfwMakeContextCurrent (window);
     glfwSetFramebufferSizeCallback (window, framebuffer_size_callback);
     if (!window)

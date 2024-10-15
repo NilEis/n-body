@@ -121,15 +121,15 @@ void bh_tree_insert (bh_tree *restrict tree, const ant *restrict v, int d)
     }
 }
 
-static float dist (
-    const float x1, const float y1, const float x2, const float y2)
+static double dist (
+    const double x1, const double y1, const double x2, const double y2)
 {
-    return sqrtf (powf (x2 - x1, 2) + powf (y2 - y1, 2));
+    return sqrt (pow (x2 - x1, 2) + pow (y2 - y1, 2));
 }
 
-int bh_tree_apply_force (const bh_tree *restrict tree, ant *restrict v)
+void bh_tree_apply_force (const bh_tree *restrict tree, ant *restrict v)
 {
-    const double THETA = 2.25;
+    const double THETA = 1.75;
     const int index = 2 * v->pos_index;
     if (bh_tree_is_leaf (tree))
     {
