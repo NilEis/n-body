@@ -11,7 +11,7 @@ static struct
 
 THREAD_FUNCTION (update_wrapper)
 {
-    //_sleep (5000);
+    _sleep (5000);
     while (1)
     {
         update ();

@@ -58,16 +58,16 @@ static void apply_force (
 }
 static void update_ant (ant *v)
 {
+    static double max_v = 0;
     const double i_w = v->w;
     v->vx += v->fx / i_w;
     v->vy += v->fy / i_w;
     v->vx = v->vx == NAN ? 0 : v->vx;
     v->vy = v->vy == NAN ? 0 : v->vy;
     const int index = 2 * v->pos_index;
-    (*state.ants_pos_write)[index]
-        = (*state.ants_pos_read)[index] + (GLfloat)v->vx;
+    (*state.ants_pos_write)[index] = (*state.ants_pos_read)[index] + v->vx;
     (*state.ants_pos_write)[index + 1]
-        = (*state.ants_pos_read)[index + 1] + (GLfloat)v->vy;
+        = (*state.ants_pos_read)[index + 1] + v->vy;
 }
 
 #endif // BH_TREE_H

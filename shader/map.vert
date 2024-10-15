@@ -24,10 +24,12 @@ vec2 normalize_value(dvec2 x, dvec4 range)
 void main() {
     if (gl_InstanceID==0)
     {
+        gl_PointSize = 3;
         col = vec3(1.0);
     }
     else
     {
+        gl_PointSize = 1;
         col = vec3(1.0);
     }
     vec3 p = in_pos + vec3(ants[gl_InstanceID].xy, 0.0);
